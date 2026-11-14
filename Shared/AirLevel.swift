@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// CO₂ bands. Outdoor air is ~420 ppm; these follow common indoor guidance
+/// CO₂ bands. Outdoor air is ~430 ppm (NOAA, 2025–26); these follow common indoor guidance
 /// (and the thresholds most CO₂ monitors use).
 enum CO2Level: CaseIterable {
     case clear, fine, stale, poor
@@ -37,7 +37,7 @@ enum CO2Level: CaseIterable {
         case .clear: "Like outside. Nothing to do."
         case .fine: "Comfortable. Air it out soon."
         case .stale: "Open a window for a few minutes."
-        case .poor: "Ventilate now — focus and sleep suffer."
+        case .poor: "Ventilate now — open a window wide."
         }
     }
 
@@ -47,6 +47,20 @@ enum CO2Level: CaseIterable {
         case .fine: Ink.ink
         case .stale: Ink.kincha
         case .poor: Ink.shu
+        }
+    }
+}
+
+extension CO2Level {
+    /// The advice for someone whose window is usually tilted open: a tilted
+    /// window airs slowly, so "open a window" means "open it wide". `habit`
+    /// is the raw `AiringHabit`, so Shared stays independent of the app.
+    func advice(habit: String?) -> String {
+        guard habit == "windowUsuallyOpen" else { return advice }
+        switch self {
+        case .stale: return "Open the window wide for a few minutes. Tilted, it airs slowly."
+        case .poor: return "Open it wide now. A tilted window can't keep up."
+        case .clear, .fine: return advice
         }
     }
 }

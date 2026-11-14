@@ -11,6 +11,7 @@ struct StationView: View {
     @Environment(Recorder.self) private var recorder
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.legibilityWeight) private var legibilityWeight
     @Query(sort: \Place.sortIndex) private var places: [Place]
 
     /// The "how to leave" hint shows on arrival, then gets out of the way.
@@ -46,7 +47,7 @@ struct StationView: View {
                                 .frame(width: 220, height: 220)
                                 .opacity(stale ? 0.4 : 0.8)
                             Text(Metric.co2.format(co2))
-                                .font(Typeface.numeral(64))
+                                .font(Typeface.numeral(64, bold: legibilityWeight == .bold))
                                 .foregroundStyle(.white.opacity(stale ? style.secondary : style.numeral))
                         }
                         .accessibilityElement(children: .ignore)

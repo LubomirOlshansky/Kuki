@@ -27,6 +27,11 @@ struct EnsoRing: View {
     /// 0 dry … 1 just painted. Wet ink reads lighter; it dries as the sensor
     /// settles into a new room.
     var wetness: Double = 0
+    /// How the stroke follows a new fraction (nil = at once). The onboarding
+    /// simulator drives it directly while it sweeps.
+    var fractionAnimation: Animation? = .easeInOut(duration: 1.2)
+    /// How the pigment crossfades to a new colour.
+    var colorAnimation: Animation? = .easeInOut(duration: 1.2)
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var painted: Double
@@ -37,7 +42,11 @@ struct EnsoRing: View {
 
     init(fraction: Double, color: Color, lineWidth: CGFloat = 10,
          paintToken: AnyHashable = 0, memory: EnsoPaintMemory? = nil, animated: Bool = true,
-         wetness: Double = 0) {
+         wetness: Double = 0,
+         fractionAnimation: Animation? = .easeInOut(duration: 1.2),
+         colorAnimation: Animation? = .easeInOut(duration: 1.2)) {
+        self.fractionAnimation = fractionAnimation
+        self.colorAnimation = colorAnimation
         self.fraction = fraction
         self.color = color
         self.lineWidth = lineWidth
@@ -71,8 +80,8 @@ struct EnsoRing: View {
             }
             .opacity((lifted ? 0 : 1) * (1 - 0.45 * min(1, max(0, wetness))))
         }
-        .animation(reduceMotion || !animated ? nil : .easeInOut(duration: 1.2), value: fraction)
-        .animation(animated ? .easeInOut(duration: 1.2) : nil, value: color)
+        .animation(reduceMotion || !animated ? nil : fractionAnimation, value: fraction)
+        .animation(animated ? colorAnimation : nil, value: color)
         .animation(animated ? .easeInOut(duration: 1.5) : nil, value: wetness)
         .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.5), trigger: landings)
         .onAppear(perform: paintIfNeeded)
@@ -332,10 +341,16 @@ struct AirMotes: View {
     /// Half-size of the clear zone around the reading, in units of the field's
     /// radius.
     var exclusion = CGSize(width: 0.68, height: 0.40)
+    /// 0 still air … 1 a gust through an open window: the motes are carried
+    /// sideways and out of the circle. Animatable, so it can ramp.
+    var wind: Double = 0
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.motionPaused) private var motionPaused
+    /// When the current gust began (reference time), so motes accelerate from
+    /// where they are instead of jumping.
+    @State private var gustStart: Double?
 
     nonisolated static let maxCount = 90
     /// Below this the air is clear, and the field is empty.
@@ -371,11 +386,15 @@ struct AirMotes: View {
         let base = Double(Self.count(for: ppm))
         let shown = base * min(1, max(0, reveal))
         MoteField(count: shown, color: color, zone: exclusion,
-                  still: reduceMotion, paused: reduceMotion || scenePhase != .active || motionPaused)
+                  still: reduceMotion, paused: reduceMotion || scenePhase != .active || motionPaused,
+                  wind: reduceMotion ? 0 : wind, gustStart: gustStart ?? 0)
             .animation(.easeInOut(duration: 2), value: base)
             .animation(reveal == 0 ? nil : .easeInOut(duration: 2), value: reveal)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+            .onChange(of: wind > 0) { _, gusting in
+                gustStart = gusting ? Date.now.timeIntervalSinceReferenceDate : nil
+            }
     }
 }
 
@@ -387,10 +406,12 @@ private struct MoteField: View, Animatable {
     var zone: CGSize
     var still: Bool
     var paused: Bool
+    var wind: Double = 0
+    var gustStart: Double = 0
 
-    var animatableData: Double {
-        get { count }
-        set { count = newValue }
+    var animatableData: AnimatablePair<Double, Double> {
+        get { AnimatablePair(count, wind) }
+        set { count = newValue.first; wind = newValue.second }
     }
 
     var body: some View {
@@ -414,7 +435,9 @@ private struct MoteField: View, Animatable {
                     let v = fract(r2 - rise)              // 0 bottom … 1 top, wrapping
                     let y = (1 - v) * 2 - 1               // -1…1
                     let sway = still ? 0 : sin(time * (0.3 + r1 * 0.4) + seed) * 0.06
-                    let x = (r1 * 2 - 1) * 0.92 + sway
+                    // A gust: each mote is carried sideways, faster the longer it blows.
+                    let gust = wind > 0 ? wind * wind * 1.4 * max(0, time - gustStart) * (0.6 + r1 * 0.8) : 0
+                    let x = (r1 * 2 - 1) * 0.92 + sway + gust
                     // Keep inside the circle; soften toward the edge.
                     let d = sqrt(x * x + y * y)
                     guard d < 0.86 else { continue }

@@ -9,6 +9,9 @@ struct KukiApp: App {
     @UIApplicationDelegateAdaptor(KukiAppDelegate.self) private var appDelegate
 
     init() {
+        // First thing: sessions and app-lifecycle events start here (only in
+        // the real app, never under tests, never with sharing turned off).
+        AmplitudeBackend.shared.start()
         do {
             // Our own folder and file name — never SwiftData's shared
             // `default.store`, which unsandboxed Mac builds put straight into
@@ -37,8 +40,11 @@ struct KukiApp: App {
                 .environment(recorder)
                 .environment(nav)
                 .task {
-                    recorder.start(container: container)
+                    // Attach first, so sync can follow a place merge before
+                    // configure falls back to the first place.
                     HistorySync.shared.attach(recorder)
+                    recorder.start(container: container)
+                    UsageAnalytics.shared.start(recorder: recorder, container: container)
                     #if targetEnvironment(macCatalyst)
                     MenuBarBridge.shared.start(recorder: recorder, container: container)
                     #endif
@@ -100,6 +106,10 @@ final class AppNav {
     var historyMetric: Metric = .co2
     /// A File › Export request waiting for its save panel (Mac).
     var exportRequest: ExportFile.Kind?
+    /// Settings › Replay introduction.
+    var replayingOnboarding = false
+    /// Mirrors `hasCompletedOnboarding`, so menu commands can follow it.
+    var introductionDone = UserDefaults.standard.bool(forKey: OnboardingKeys.hasCompleted)
 }
 
 struct RootView: View {
@@ -108,47 +118,29 @@ struct RootView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(OnboardingKeys.hasCompleted) private var hasCompletedOnboarding = false
+
+    /// The introduction replaces the tabs (a root swap, not a cover): Now stays
+    /// unmounted until it ends, so its first ensō paint is the handoff.
+    private var showOnboarding: Bool { !hasCompletedOnboarding || nav.replayingOnboarding }
 
     var body: some View {
         @Bindable var recorder = recorder
-        @Bindable var nav = nav
-        // Symbols that all have filled forms, so the tab bar shows one family.
-        // On the Mac, Export lives in the File menu and Settings in its own
-        // window: the window keeps just Now and History.
-        TabView(selection: $nav.tab) {
-            Tab("Now", systemImage: "circle.dotted.circle", value: AppTab.now) { NowView() }
-            Tab("History", systemImage: "chart.line.text.clipboard", value: AppTab.history) { HistoryView() }
-            #if !targetEnvironment(macCatalyst)
-            Tab("Export", systemImage: "square.and.arrow.up", value: AppTab.export) { ExportView() }
-            Tab("Settings", systemImage: "gearshape", value: AppTab.settings) { SettingsView() }
-            #endif
+        Group {
+            if showOnboarding {
+                OnboardingFlow(mode: hasCompletedOnboarding ? .replay : .firstRun)
+                    .transition(.opacity)
+            } else {
+                tabs.transition(.opacity)
+            }
         }
-        // Three or four destinations don't need a sidebar (or its toggle).
-        .tabViewStyle(.tabBarOnly)
+        .animation(.easeInOut(duration: reduceMotion ? 0.25 : 0.5), value: showOnboarding)
         .tint(Ink.ink)
         .environment(\.motionPaused, !WindowVisibility.shared.mainWindowVisible)
         // Hand the environment over explicitly: on Mac Catalyst a full-screen
         // cover is hosted outside this view tree and doesn't inherit it.
-        #if targetEnvironment(macCatalyst)
-        // Settings lives in the app menu (⌘,), but a quiet gear in the window
-        // corner makes it findable without knowing that.
-        .overlay(alignment: .topTrailing) {
-            Button {
-                WindowRouter.shared.show(WindowID.settings, using: openWindow)
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 15, weight: .regular))
-                    .foregroundStyle(Ink.inkSoft)
-                    .frame(width: 30, height: 30)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(QuietButtonStyle())
-            .help("Settings (⌘,)")
-            .accessibilityLabel("Settings")
-            .padding(.top, 10)
-            .padding(.trailing, 14)
-        }
-        #endif
+        // (Mac Settings: the app menu's Settings… (⌘,) and the menu bar item.)
         .fullScreenCover(isPresented: $recorder.stationMode) {
             StationView()
                 .environment(recorder)
@@ -159,7 +151,10 @@ struct RootView: View {
                                            set: { if !$0 { nav.exportRequest = nil } }),
                       item: exportFile,
                       contentTypes: exportFile.map { [$0.contentType] } ?? [],
-                      defaultFilename: exportFile.map { Exporter.fileName($0.fileExtension) }) { _ in
+                      defaultFilename: exportFile.map { Exporter.fileName($0.fileExtension) }) { result in
+            if case .success = result, let kind = nav.exportRequest {
+                UsageAnalytics.shared.exportPerformed(format: kind, action: "save", range: nav.historyRange.rawValue)
+            }
             nav.exportRequest = nil
         } onCancellation: {
             nav.exportRequest = nil
@@ -182,12 +177,53 @@ struct RootView: View {
             #endif
             #if targetEnvironment(macCatalyst)
             MenuBarBridge.shared.ensureRecorderWindow()
+            // First launch (also at login): the introduction is in this window.
+            if !hasCompletedOnboarding { WindowRouter.shared.show(WindowID.main, using: openWindow) }
             #endif
+            syncOnboarding()
+        }
+        .onChange(of: hasCompletedOnboarding) {
+            syncOnboarding()
+            UsageAnalytics.shared.refreshProperties()
         }
         .onChange(of: scenePhase) { _, phase in
             DebugLog.write("scene", "phase → \(phase)")
-            if phase == .active { recorder.appBecameActive() }
+            if phase == .active {
+                recorder.appBecameActive()
+                UsageAnalytics.shared.appBecameActive()
+            }
+            // Hand queued events to Amplitude before iOS freezes the app.
+            if phase == .background { AmplitudeBackend.shared.flush() }
         }
+        .onChange(of: nav.tab) { _, tab in UsageAnalytics.shared.tabViewed(tab) }
+        .onChange(of: nav.historyRange) { UsageAnalytics.shared.historyViewed(range: nav.historyRange, metric: nav.historyMetric) }
+        .onChange(of: nav.historyMetric) { UsageAnalytics.shared.historyViewed(range: nav.historyRange, metric: nav.historyMetric) }
+    }
+
+    /// Nothing is recorded or rung while the introduction is still choosing a
+    /// sensor and a place (replay doesn't hold).
+    private func syncOnboarding() {
+        recorder.holdRecording = !hasCompletedOnboarding
+        nav.introductionDone = hasCompletedOnboarding
+    }
+
+    private var tabs: some View {
+        @Bindable var nav = nav
+        // Symbols that all have filled forms, so the tab bar shows one family.
+        // On the Mac, Export lives in the File menu and Settings in its own
+        // window: the window keeps just Now and History.
+        return TabView(selection: $nav.tab) {
+            Tab("Now", systemImage: "circle.dotted.circle", value: AppTab.now) { NowView() }
+            Tab("History", systemImage: "chart.line.text.clipboard", value: AppTab.history) { HistoryView() }
+            #if !targetEnvironment(macCatalyst)
+            Tab("Export", systemImage: "square.and.arrow.up", value: AppTab.export) { ExportView() }
+            Tab("Settings", systemImage: "gearshape", value: AppTab.settings) { SettingsView() }
+            #endif
+        }
+        // Three or four destinations don't need a sidebar (or its toggle).
+        .tabViewStyle(.tabBarOnly)
+        // The tab showing when the tabs appear (launch, end of the introduction).
+        .onAppear { UsageAnalytics.shared.tabViewed(nav.tab) }
     }
 
     /// What File › Export… writes: the period History is showing.
@@ -236,21 +272,27 @@ struct KukiCommands: Commands {
         // HIG › The menu bar: exporting belongs in the File menu. Both follow
         // the period History is showing.
         CommandGroup(replacing: .importExport) {
-            Button("Export CSV…") { requestExport(.csv) }
-                .keyboardShortcut("e", modifiers: [.command, .shift])
-            Button("Export for AI…") { requestExport(.markdown) }
-                .keyboardShortcut("e", modifiers: [.command, .shift, .option])
+            Group {
+                Button("Export CSV…") { requestExport(.csv) }
+                    .keyboardShortcut("e", modifiers: [.command, .shift])
+                Button("Export for AI…") { requestExport(.markdown) }
+                    .keyboardShortcut("e", modifiers: [.command, .shift, .option])
+            }
+            .disabled(!nav.introductionDone)
         }
         #endif
         CommandMenu("Air") {
-            Button("Now") { show(.now) }.keyboardShortcut("1")
-            Button("History") { show(.history) }.keyboardShortcut("2")
-            #if !targetEnvironment(macCatalyst)
-            Button("Export") { show(.export) }.keyboardShortcut("3")
-            #endif
-            Divider()
-            PlaceCommands(recorder: recorder).modelContainer(container)
-            Divider()
+            Group {
+                Button("Now") { show(.now) }.keyboardShortcut("1")
+                Button("History") { show(.history) }.keyboardShortcut("2")
+                #if !targetEnvironment(macCatalyst)
+                Button("Export") { show(.export) }.keyboardShortcut("3")
+                #endif
+                Divider()
+                PlaceCommands(recorder: recorder).modelContainer(container)
+                Divider()
+            }
+            .disabled(!nav.introductionDone)
             // A toggle, so the same ⌃⌘S that enters Station Mode leaves it.
             Toggle("Station Mode", isOn: Binding(
                 get: { recorder.stationMode },
@@ -260,7 +302,11 @@ struct KukiCommands: Commands {
                 }
             ))
             .keyboardShortcut("s", modifiers: [.command, .control])
-            Button("Play Chime") { recorder.previewAlert() }
+            .disabled(!nav.introductionDone)
+            Button("Play Chime") {
+                recorder.previewAlert()
+                Analytics.track("chime_played_manually")
+            }
         }
     }
 
@@ -277,8 +323,10 @@ struct KukiCommands: Commands {
 
     private func openSettings() {
         #if targetEnvironment(macCatalyst)
+        Analytics.track("settings_opened", ["via": "cmd_comma"])
         WindowRouter.shared.show(WindowID.settings, using: openWindow)
         #else
+        if nav.tab != .settings { UsageAnalytics.shared.pendingSettingsVia = "cmd_comma" }
         show(.settings)
         #endif
     }

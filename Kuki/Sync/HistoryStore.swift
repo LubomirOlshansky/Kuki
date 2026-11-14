@@ -10,6 +10,12 @@ actor HistoryStore {
     /// The hours that hold this device's own (non-demo) readings, oldest
     /// first — everything, or only from `sinceHour` on.
     func ownHours(deviceID: String, sinceHour: Int? = nil) -> [Int] {
+        Self.ownHours(in: modelContext, deviceID: deviceID, sinceHour: sinceHour)
+    }
+
+    /// The same on any context — the main one, when "Delete all recordings"
+    /// needs the hours before the readings go.
+    nonisolated static func ownHours(in context: ModelContext, deviceID: String, sinceHour: Int? = nil) -> [Int] {
         let demo = DemoSensor.name
         let since = sinceHour.map(EpochHour.start) ?? .distantPast
         var descriptor = FetchDescriptor<Reading>(predicate: #Predicate {
@@ -17,7 +23,7 @@ actor HistoryStore {
                 && ($0.originDeviceID == nil || $0.originDeviceID == deviceID)
         })
         descriptor.propertiesToFetch = [\.timestamp]
-        let rows = (try? modelContext.fetch(descriptor)) ?? []
+        let rows = (try? context.fetch(descriptor)) ?? []
         return ChunkBuilder.hours(rows.map(\.timestamp))
     }
 
@@ -56,6 +62,18 @@ actor HistoryStore {
         for (index, place) in plan.placeUpdates { existing[index].placeID = place }
         if !plan.inserts.isEmpty || !plan.placeUpdates.isEmpty { try? modelContext.save() }
         return ImportResult(inserted: plan.inserts.count, duplicates: plan.duplicates)
+    }
+
+    /// Another device deleted its copy of an hour ("Delete all recordings"
+    /// there): the readings it sent for that hour go here too. Readings of
+    /// this device, and of any other, stay. Returns how many were removed.
+    func deleteChunk(deviceID: String, epochHour: Int, localDeviceID: String) -> Int {
+        guard deviceID != localDeviceID else { return 0 }
+        let rows = fetchHour(epochHour).filter { $0.originDeviceID == deviceID }
+        guard !rows.isEmpty else { return 0 }
+        for r in rows { modelContext.delete(r) }
+        try? modelContext.save()
+        return rows.count
     }
 
     /// A place merge: every reading filed under `from` moves to `to`.

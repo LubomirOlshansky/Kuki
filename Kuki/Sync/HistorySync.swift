@@ -36,6 +36,8 @@ final class HistorySync {
     @ObservationIgnored private var caughtUpThisRun = false
     @ObservationIgnored private var lastActiveFetch: Date = .distantPast
     @ObservationIgnored private var sendProblem: String?
+    @ObservationIgnored private var retries = SaveRetryBook()
+    @ObservationIgnored private let sendSoonDebouncer = SendDebouncer(delay: SyncSchema.sendSoonDelay)
 
     static var isRunningTests: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
@@ -57,6 +59,11 @@ final class HistorySync {
         recorder.originDeviceID = core.deviceID
         recorder.syncHooks = self
         core.recorder = recorder
+        // A merge filed at launch, before any window, couldn't move the
+        // recorder. (Fully effective only when attached before
+        // `recorder.start`, whose `configure` otherwise falls back to the
+        // first place when the current one is gone.)
+        core.followMerges()
         core.applyPendingState()
     }
 
@@ -65,16 +72,61 @@ final class HistorySync {
         if shouldRun { start() } else { stop() }
     }
 
+    /// The engine is up — what "Delete all recordings" tells the user.
+    var isRunning: Bool { engine != nil }
+
     /// Fetch now (push, app in front, or the periodic timer).
     @discardableResult
     func fetchNow() async -> Bool {
         guard let engine else { return false }
+        let started = Date.now
         do {
             try await engine.fetchChanges()
+            core?.debug("engine fetch returned after \(Int(Date.now.timeIntervalSince(started) * 1000)) ms")
             return true
         } catch {
             core?.say("fetch failed: \(error.localizedDescription)")
             return false
+        }
+    }
+
+    /// The periodic check. `fetchChanges()` only goes to the server when
+    /// the engine already knows of changes (a push it received): on device
+    /// it came back in ~5 ms with no request otherwise, so a Mac that missed
+    /// a push stayed behind. So also read `current-place` itself — one small
+    /// request — and file it like a fetched SensorState.
+    private func periodicCheck() async {
+        await fetchNow()
+        await checkSensorState()
+    }
+
+    private func checkSensorState() async {
+        // Before the first fetch and catch-up, the engine's own fetch covers it.
+        guard let engine, caughtUpThisRun else { return }
+        let id = SyncRecordName.sensorState.recordID
+        let result: Result<CKRecord, any Error>
+        do {
+            let results = try await engine.database.records(for: [id])
+            guard let one = results[id] else { return }
+            result = one
+        } catch {
+            result = .failure(error)
+        }
+        guard engine === self.engine, let core else { return } // stopped meanwhile
+        switch result {
+        case let .success(record):
+            let before = core.ledger.serverStateChangedAt
+            let s = await core.applyFetched([record])
+            let after = core.ledger.serverStateChangedAt
+            if let after, after > (before ?? .distantPast) {
+                core.say("periodic check: iCloud had a newer sensor's place than the last fetch (\(s.states) applied)")
+            } else {
+                core.debug("periodic check: sensor's place in iCloud already known")
+            }
+        case let .failure(error) where (error as? CKError)?.code == .unknownItem:
+            core.noteStateMissingOnServer()
+        case let .failure(error):
+            core.say("periodic check of the sensor's place failed: \(error.localizedDescription)")
         }
     }
 
@@ -105,8 +157,17 @@ final class HistorySync {
         core.outbox = self
         caughtUpThisRun = false
         sendProblem = nil
+        retries = SaveRetryBook()
         if !core.ledger.zoneSaved {
             engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: SyncSchema.zoneID))])
+        }
+        // Deletes the ledger still waits for (normally already in the
+        // engine's saved state; adding them again is harmless).
+        let deleting = core.ledger.pendingChunkDeletes.sorted()
+        if !deleting.isEmpty {
+            engine.state.add(pendingRecordZoneChanges: deleting.map {
+                .deleteRecord(SyncRecordName.chunk(deviceID: core.deviceID, epochHour: $0).recordID)
+            })
         }
         status = core.ledger.lastSyncAt.map(Status.synced) ?? .waiting
         core.say("engine started (\(state == nil ? "fresh state" : "resumed"), device \(core.deviceID.prefix(8)))")
@@ -119,6 +180,7 @@ final class HistorySync {
     private func stop() {
         periodic?.cancel()
         periodic = nil
+        sendSoonDebouncer.cancel()
         core?.outbox = nil
         status = .off
         guard let engine else { return }
@@ -140,23 +202,31 @@ final class HistorySync {
         periodic?.cancel()
         periodic = Task { [weak self] in
             // One right away (the engine fetches on start too, but this makes
-            // "on launch" explicit), then every 15 minutes.
+            // "on launch" explicit), then a real check every 15 minutes.
+            await self?.fetchNow()
             while !Task.isCancelled {
-                await self?.fetchNow()
                 try? await Task.sleep(for: .seconds(SyncSchema.periodicFetch))
+                guard !Task.isCancelled else { return }
+                await self?.periodicCheck()
             }
         }
     }
 
     private func observeLifecycle() {
         let center = NotificationCenter.default
+        // Synchronously (queue: .main), not in a spawned Task: the background
+        // task must exist before UIKit counts them. On a Mac quit, UIKit
+        // backgrounds the app first and waits for its background tasks (up
+        // to ~35 s), so this is where the last hour really goes up; by
+        // willTerminate it's too late to wait for anything, so that only
+        // queues the hour in the engine's state for the next launch.
         observers.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification,
                                             object: nil, queue: .main) { _ in
-            Task { @MainActor in HistorySync.shared.flushInBackground() }
+            MainActor.assumeIsolated { HistorySync.shared.flushInBackground() }
         })
         observers.append(center.addObserver(forName: UIApplication.willTerminateNotification,
                                             object: nil, queue: .main) { _ in
-            Task { @MainActor in HistorySync.shared.flushInBackground() }
+            MainActor.assumeIsolated { HistorySync.shared.core?.flush() }
         })
         observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification,
                                             object: nil, queue: .main) { _ in
@@ -237,9 +307,17 @@ final class HistorySync {
         case let .fetchedRecordZoneChanges(changes):
             let records = changes.modifications.map(\.record)
                 .filter { $0.recordID.zoneID.zoneName == SyncSchema.zoneName }
-            guard !records.isEmpty else { return }
-            let s = await core.applyFetched(records)
-            core.say("fetched \(s.chunks) chunks (+\(s.imported) readings imported, \(s.duplicates) duplicates skipped), \(s.places) places, \(s.states) sensor states")
+            let deleted = changes.deletions.map(\.recordID)
+                .filter { $0.zoneID.zoneName == SyncSchema.zoneName }
+                .map(\.recordName)
+            if !records.isEmpty {
+                let s = await core.applyFetched(records)
+                core.say("fetched \(s.chunks) chunks (+\(s.imported) readings imported, \(s.duplicates) duplicates skipped), \(s.places) places, \(s.states) sensor states")
+            }
+            if !deleted.isEmpty {
+                let removed = await core.applyFetchedDeletions(deleted)
+                core.say("fetched \(deleted.count) deletions (\(removed) readings removed)")
+            }
 
         case let .sentDatabaseChanges(sent):
             if sent.savedZones.contains(where: { $0.zoneID.zoneName == SyncSchema.zoneName }) {
@@ -282,9 +360,10 @@ final class HistorySync {
     private func handleSent(_ sent: CKSyncEngine.Event.SentRecordZoneChanges, syncEngine: CKSyncEngine) async {
         guard let core else { return }
         core.didSend(sent.savedRecords)
+        retries.succeeded(sent.savedRecords.map(\.recordID.recordName) + sent.deletedRecordIDs.map(\.recordName))
         var retry: [CKSyncEngine.PendingRecordZoneChange] = []
         var zoneMissing = false
-        sendProblem = nil
+        var storageFull = false
         for failure in sent.failedRecordSaves {
             let id = failure.record.recordID
             switch failure.error.code {
@@ -299,17 +378,35 @@ final class HistorySync {
                 core.forgetServerCopy(id.recordName)
                 retry.append(.saveRecord(id))
             case .quotaExceeded:
-                sendProblem = "iCloud storage is full"
+                storageFull = true
                 retry.append(.saveRecord(id))
             case .batchRequestFailed:
                 retry.append(.saveRecord(id))
             case .networkFailure, .networkUnavailable, .zoneBusy, .serviceUnavailable,
-                 .notAuthenticated, .operationCancelled, .requestRateLimited:
-                break // the engine retries these itself
+                 .notAuthenticated, .operationCancelled, .requestRateLimited, .accountTemporarilyUnavailable:
+                core.debug("save of \(id.recordName) waits for the engine to retry: \(failure.error.localizedDescription)")
             default:
-                core.say("save failed for \(id.recordName): \(failure.error.localizedDescription)")
+                if retryAfterUnknownError(id.recordName, failure.error, core: core) { retry.append(.saveRecord(id)) }
             }
         }
+        var deleted = sent.deletedRecordIDs.map(\.recordName)
+        for (id, error) in sent.failedRecordDeletes {
+            switch error.code {
+            case .unknownItem, .zoneNotFound:
+                deleted.append(id.recordName) // nothing there to delete
+            case .networkFailure, .networkUnavailable, .zoneBusy, .serviceUnavailable,
+                 .notAuthenticated, .operationCancelled, .requestRateLimited, .accountTemporarilyUnavailable:
+                core.debug("delete of \(id.recordName) waits for the engine to retry: \(error.localizedDescription)")
+            default:
+                if retryAfterUnknownError(id.recordName, error, core: core, deleting: true) {
+                    retry.append(.deleteRecord(id))
+                } else {
+                    deleted.append(id.recordName) // given up: don't hold its hour back for ever
+                }
+            }
+        }
+        core.didDelete(deleted)
+        sendProblem = storageFull ? "iCloud storage is full" : retries.problem
         if zoneMissing {
             core.resetZone()
             syncEngine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: SyncSchema.zoneID))])
@@ -320,10 +417,25 @@ final class HistorySync {
         let chunks = types.filter { $0 == SyncSchema.RecordType.hourChunk }.count
         let places = types.filter { $0 == SyncSchema.RecordType.place }.count
         let states = types.filter { $0 == SyncSchema.RecordType.sensorState }.count
-        if !sent.savedRecords.isEmpty || !sent.failedRecordSaves.isEmpty {
-            let failed = sent.failedRecordSaves.isEmpty ? "" : " (\(sent.failedRecordSaves.count) failed, \(retry.count) retried)"
-            core.say("sent \(chunks) chunks, \(places) places, \(states) sensor states\(failed)")
+        let failures = sent.failedRecordSaves.count + sent.failedRecordDeletes.count
+        if !sent.savedRecords.isEmpty || !sent.deletedRecordIDs.isEmpty || failures > 0 {
+            let removed = sent.deletedRecordIDs.isEmpty ? "" : ", \(sent.deletedRecordIDs.count) deletions"
+            let failed = failures == 0 ? "" : " (\(failures) failed, \(retry.count) retried)"
+            core.say("sent \(chunks) chunks, \(places) places, \(states) sensor states\(removed)\(failed)")
         }
+    }
+
+    /// A failure the engine doesn't handle: try again, a bounded number of
+    /// times. Returns whether to queue it again.
+    private func retryAfterUnknownError(_ name: String, _ error: CKError, core: SyncCore, deleting: Bool = false) -> Bool {
+        let what = deleting ? "delete" : "save"
+        let (attempt, again) = retries.failed(name)
+        if again {
+            core.say("\(what) failed for \(name) (attempt \(attempt) of \(retries.maxAttempts)), trying again: \(error.localizedDescription) [\(error.code.rawValue)]")
+        } else {
+            core.say("\(what) failed for \(name) \(attempt) times — giving up: \(error.localizedDescription) [\(error.code.rawValue)]")
+        }
+        return again
     }
 
     fileprivate func nextBatch(_ context: CKSyncEngine.SendChangesContext,
@@ -335,19 +447,28 @@ final class HistorySync {
         guard !pending.isEmpty else { return nil }
         let skipped = SkipBox()
         let batch = await CKSyncEngine.RecordZoneChangeBatch(pendingChanges: pending) { id in
-            let record: CKRecord?
+            let built: Result<CKRecord, SkipReason>
             if let name = SyncRecordName(id.recordName), id.zoneID.zoneName == SyncSchema.zoneName {
-                record = await core.record(for: name)
+                built = await core.buildRecord(for: name)
             } else {
-                record = nil
+                built = .failure(SkipReason("not a Kūki history record"))
             }
-            if record == nil { skipped.add(id) }
-            return record
+            switch built {
+            case let .success(record):
+                return record
+            case let .failure(reason):
+                skipped.add(id, reason: reason.text)
+                return nil
+            }
         }
         // Nothing to send for these (or the server has newer): drop them, so
-        // they don't come round again.
-        let dropped = skipped.ids
-        if !dropped.isEmpty { syncEngine.state.remove(pendingRecordZoneChanges: dropped.map { .saveRecord($0) }) }
+        // they don't come round again — and say why.
+        let dropped = skipped.items
+        if !dropped.isEmpty {
+            syncEngine.state.remove(pendingRecordZoneChanges: dropped.map { .saveRecord($0.id) })
+            for item in dropped.prefix(10) { core.say("dropped \(item.id.recordName): \(item.reason)") }
+            if dropped.count > 10 { core.say("dropped \(dropped.count - 10) more changes with nothing to send") }
+        }
         guard let batch, !(batch.recordsToSave.isEmpty && batch.recordIDsToDelete.isEmpty) else { return nil }
         return batch
     }
@@ -365,9 +486,42 @@ final class HistorySync {
 // MARK: - Hooks and outbox
 
 extension HistorySync: SyncOutbox, RecorderSyncHooks {
-    func enqueueSaves(_ names: [SyncRecordName]) {
-        guard let engine else { return }
+    @discardableResult
+    func enqueueSaves(_ names: [SyncRecordName]) -> Bool {
+        guard let engine else {
+            core?.say("sync engine isn't running — \(names.count) changes not queued")
+            return false
+        }
         engine.state.add(pendingRecordZoneChanges: names.map { .saveRecord($0.recordID) })
+        return true
+    }
+
+    @discardableResult
+    func enqueueDeletes(_ names: [SyncRecordName]) -> Bool {
+        guard let engine else {
+            core?.say("sync engine isn't running — \(names.count) deletions not queued")
+            return false
+        }
+        let ids = names.map(\.recordID)
+        // One request can't save and delete the same record.
+        engine.state.remove(pendingRecordZoneChanges: ids.map { .saveRecord($0) })
+        engine.state.add(pendingRecordZoneChanges: ids.map { .deleteRecord($0) })
+        return true
+    }
+
+    /// The engine's own schedule may wait, and the only other explicit send
+    /// is on going to the background: a move made with the app in front
+    /// would sit here. Send a few seconds after the last such change.
+    func sendSoon() {
+        guard engine != nil else { return }
+        sendSoonDebouncer.schedule { [weak self] in
+            guard let self, let engine = self.engine else { return }
+            do {
+                try await engine.sendChanges()
+            } catch {
+                self.core?.say("send failed: \(error.localizedDescription)")
+            }
+        }
     }
 
     func recorderDidRecord(at time: Date, sensorName: String) {
@@ -385,6 +539,10 @@ extension HistorySync: SyncOutbox, RecorderSyncHooks {
     func recorderDidDeletePlace(_ place: Place) {
         core?.placeDeleted(id: place.id, name: place.name, kanji: place.kanji,
                            sortIndex: place.sortIndex, createdAt: place.createdAt)
+    }
+
+    func recorderWillDeleteAllReadings() {
+        core?.ownHistoryWillBeDeleted()
     }
 }
 
@@ -406,12 +564,14 @@ private final class EngineDelegate: CKSyncEngineDelegate, @unchecked Sendable {
     }
 }
 
-/// Record ids the batch builder skipped (it calls the provider serially).
+/// Record ids the batch builder skipped, and why (it calls the provider
+/// serially).
 private final class SkipBox: @unchecked Sendable {
+    struct Item { let id: CKRecord.ID; let reason: String }
     private let lock = NSLock()
-    private var stored: [CKRecord.ID] = []
-    func add(_ id: CKRecord.ID) { lock.lock(); stored.append(id); lock.unlock() }
-    var ids: [CKRecord.ID] { lock.lock(); defer { lock.unlock() }; return stored }
+    private var stored: [Item] = []
+    func add(_ id: CKRecord.ID, reason: String) { lock.lock(); stored.append(Item(id: id, reason: reason)); lock.unlock() }
+    var items: [Item] { lock.lock(); defer { lock.unlock() }; return stored }
 }
 
 private final class TaskBox: @unchecked Sendable {

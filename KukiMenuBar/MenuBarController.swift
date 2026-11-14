@@ -191,6 +191,7 @@ public final class MenuBarController: NSObject, KukiStatusBar, NSMenuDelegate {
     // MARK: Menu
 
     public func menuNeedsUpdate(_ menu: NSMenu) {
+        handler?("menuOpened") // the app samples this for analytics
         menu.removeAllItems()
         let data = menuData
         let header = NSMenuItem(title: data.header.isEmpty ? "Kūki" : data.header, action: nil, keyEquivalent: "")
@@ -238,7 +239,12 @@ public final class MenuBarController: NSObject, KukiStatusBar, NSMenuDelegate {
         guard let id = sender.representedObject as? String else { return }
         switch id {
         case "quit":
-            NSApp.terminate(nil)
+            // Not from inside the menu's action: terminating while the
+            // status-item menu is still tracking left the menu bar scene
+            // unable to reach the background, and UIKit's 5-second watchdog
+            // killed the app. `perform(…afterDelay:)` runs in the default
+            // run loop mode, i.e. once menu tracking is over.
+            NSApp.perform(#selector(NSApplication.terminate(_:)), with: nil, afterDelay: 0)
         case "open", "station", "settings":
             NSApp.activate()
             handler?(id)
@@ -259,7 +265,19 @@ public final class MenuBarController: NSObject, KukiStatusBar, NSMenuDelegate {
         title = new
         let size = NSFont.systemFontSize
         let text = NSMutableAttributedString()
-        if new.alert >= 2 {
+        if new.alert < 0 {
+            // Paused (Kūki in the background): a pause mark, not dimness alone.
+            let config = NSImage.SymbolConfiguration(pointSize: size * 0.7, weight: .semibold)
+            if let image = NSImage(systemSymbolName: "pause.fill", accessibilityDescription: "Paused")?
+                .withSymbolConfiguration(config) {
+                image.isTemplate = true
+                let attachment = NSTextAttachment()
+                attachment.image = image
+                attachment.bounds = CGRect(x: 0, y: -1, width: image.size.width, height: image.size.height)
+                text.append(NSAttributedString(attachment: attachment))
+                text.append(NSAttributedString(string: " "))
+            }
+        } else if new.alert >= 2 {
             let poor = new.alert >= 3
             let color = poor
                 ? NSColor(srgbRed: 0.88, green: 0.36, blue: 0.25, alpha: 1)   // shu
@@ -297,10 +315,14 @@ public final class MenuBarController: NSObject, KukiStatusBar, NSMenuDelegate {
         button.setAccessibilityHelp("Kūki air reading. Opens the Kūki menu.")
     }
 
-    /// "CO₂ 812 parts per million, stale air".
+    /// "CO₂ 812 parts per million, stale air" · "Paused, CO₂ 812 parts per
+    /// million, last reading while Kūki is in the background".
     static func accessibilityLabel(labels: [String], values: [String], alert: Int) -> String {
         var parts = labels.isEmpty ? values : labels
         switch alert {
+        case ..<0:
+            parts.insert("Paused", at: 0)
+            parts.append("last reading while Kūki is in the background")
         case 2: parts.append("stale air")
         case 3: parts.append("poor air, ventilate now")
         default: break

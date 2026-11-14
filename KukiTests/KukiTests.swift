@@ -314,14 +314,15 @@ struct StorageTests {
 
 @Suite("History chart")
 struct ChartSegmentTests {
-    @Test func newSegmentOnMoveOrGap() {
-        let rows = [row(0, "Kitchen"), row(1, "Kitchen"),      // visit 1
-                    row(2, "Bedroom"),                         // move → visit 2
-                    row(3, "Kitchen"),                         // move back → visit 3
-                    row(200, "Kitchen")]                       // app was closed → visit 4
+    @Test func aPlacesLineBreaksOnlyOnItsOwnGaps() {
+        let rows = [row(0, "Kitchen"), row(1, "Kitchen"),      // Kitchen, stretch 0
+                    row(2, "Bedroom"),                         // Bedroom's only reading
+                    row(3, "Kitchen"),                         // Kitchen 2 min later: still stretch 0
+                    row(200, "Kitchen")]                       // app was closed → Kitchen, stretch 1
         let points = HistoryBody.segments(rows, gap: 15 * 60)
-        #expect(points.map(\.segment) == [0, 0, 1, 2, 3])
-        #expect(points.map(\.isSingle) == [false, false, true, true, true], "lone points are drawn as dots")
+        #expect(points.map(\.segment) == [0, 0, 0, 0, 1])
+        #expect(points.map(\.isSingle) == [false, false, true, false, true], "lone points are drawn as dots")
+        #expect(Set(points.map(\.series)).count == 3, "one line per (place, stretch)")
     }
 
     @Test("Gap is never shorter than three recording intervals", arguments: [1, 5, 10])
@@ -584,12 +585,49 @@ struct WidgetSnapshotTests {
         var s = WidgetSnapshot.placeholder
         let t = Date(timeIntervalSince1970: 1_800_000_000)
         s.co2 = 1200; s.measuredAt = t
-        CloudWake.alertIfNeeded(s, now: t, defaults: defaults)
-        let gate = try JSONDecoder().decode(AlertGate.self, from: try #require(defaults.data(forKey: "cloudAlertGate")))
-        #expect(gate.lastAlertAt == t, "rang once")
-        CloudWake.alertIfNeeded(s, now: t.addingTimeInterval(60), defaults: defaults)
-        let gate2 = try JSONDecoder().decode(AlertGate.self, from: try #require(defaults.data(forKey: "cloudAlertGate")))
-        #expect(gate2.lastAlertAt == t, "stays quiet while still stuffy")
+        #expect(CloudWake.alertDue(s, now: t, defaults: defaults) == 1200)
+        #expect(AlertGate.load(from: defaults).lastAlertAt == t, "rang once")
+        s.measuredAt = t.addingTimeInterval(60)
+        #expect(CloudWake.alertDue(s, now: t.addingTimeInterval(60), defaults: defaults) == nil)
+        #expect(AlertGate.load(from: defaults).lastAlertAt == t, "stays quiet while still stuffy")
+    }
+
+    @MainActor @Test func aCloudAlertIsNotRepeatedWhenTheAppOpens() throws {
+        let name = "kuki-shared-alert-\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defaults.removePersistentDomain(forName: name)
+        defaults.set(true, forKey: "notifyOn")
+        defaults.set(1000.0, forKey: "co2Limit")
+        let t = Date(timeIntervalSince1970: 1_800_000_000)
+        var s = WidgetSnapshot.placeholder
+        s.co2 = 1250; s.measuredAt = t
+        #expect(CloudWake.alertDue(s, now: t, defaults: defaults) == 1250, "the iCloud wake-up announces the spell")
+
+        // The user opens the app a minute later — a fresh launch, still stuffy.
+        var now = t.addingTimeInterval(60)
+        let recorder = Recorder(defaults: defaults, clock: { now })
+        #expect(recorder.lastAlertAt == t)
+        #expect(!recorder.alertDue(co2: 1300, now: now), "the same spell doesn't ring again in the app")
+        now = t.addingTimeInterval(45 * 60)
+        #expect(!recorder.alertDue(co2: 1300, now: now), "nor after the cooldown, while it never cleared")
+
+        // The air recovers below limit − 100, then gets stuffy again: a new spell.
+        #expect(!recorder.alertDue(co2: 850, now: now))
+        #expect(recorder.alertDue(co2: 1100, now: now.addingTimeInterval(60)))
+        // …which the cloud path now knows too.
+        s.co2 = 1150; s.measuredAt = now.addingTimeInterval(120)
+        #expect(CloudWake.alertDue(s, now: now.addingTimeInterval(120), defaults: defaults) == nil)
+    }
+
+    @MainActor @Test func theOldCloudGateIsStillHonoured() throws {
+        let name = "kuki-legacy-alert-\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defaults.removePersistentDomain(forName: name)
+        var gate = AlertGate()
+        let t = Date(timeIntervalSince1970: 1_800_000_000)
+        _ = gate.evaluate(co2: 1200, limit: 1000, settling: false, now: t)
+        defaults.set(try JSONEncoder().encode(gate), forKey: AlertGate.legacyCloudKey)
+        #expect(AlertGate.load(from: defaults) == gate, "a gate saved by the previous build carries over")
     }
 }
 

@@ -59,7 +59,8 @@ struct HistoryView: View {
 
     private func file(_ kind: ExportFile.Kind) -> ExportFile {
         ExportFile(kind: kind, since: nav.historyRange.start, limit: recorder.co2Limit, sensor: recorder.sensorName,
-                   filter: recorder.sensorFilter, container: context.container)
+                   filter: recorder.sensorFilter, container: context.container,
+                   reportRange: nav.historyRange.rawValue)
     }
 }
 
@@ -135,6 +136,8 @@ struct HistoryModel: Sendable, Equatable {
 
     var key = Key(range: .day, metric: .co2)
     var points: [HistoryBody.ChartPoint] = []
+    /// Stretches where nothing was recorded at all.
+    var gaps: [HistoryBody.Gap] = []
     var series: [Series] = []
     var stats: [PlaceStats] = []
     var rowCount = 0
@@ -143,7 +146,8 @@ struct HistoryModel: Sendable, Equatable {
         let downsampled = Exporter.downsample(rows, minutes: range.bucketMinutes)
         let gap = HistoryBody.segmentGap(bucketMinutes: range.bucketMinutes, intervalMinutes: intervalMinutes)
         let points = HistoryBody.segments(downsampled, gap: gap, metric: metric)
-        return HistoryModel(key: Key(range: range, metric: metric), points: points, series: orderedSeries(rows),
+        return HistoryModel(key: Key(range: range, metric: metric), points: points,
+                            gaps: HistoryBody.gaps(points, threshold: gap), series: orderedSeries(rows),
                             stats: PlaceStats.compute(rows, limit: limit), rowCount: rows.count)
     }
 
@@ -294,22 +298,32 @@ struct HistoryBody: View {
 
     private var emptyText: String {
         let every = intervalMinutes <= 1 ? "every minute" : "every \(intervalMinutes) minutes"
+        #if targetEnvironment(macCatalyst)
+        // On the Mac, Kūki records from the menu bar, window open or not.
+        return "Nothing recorded in this period yet. Kūki records \(every) while it's in the menu bar."
+        #else
         return "Nothing recorded in this period yet. Keep Kūki open — it records \(every)."
+        #endif
     }
 
     private func seriesIndex(_ key: String, in model: HistoryModel) -> Int {
         model.series.firstIndex { $0.key == key } ?? 0
     }
 
-    struct Gap: Identifiable, Equatable {
+    struct Gap: Identifiable, Sendable, Equatable {
         let id: Int
         let from: ChartPoint
         let to: ChartPoint
         var middle: Date { from.time.addingTimeInterval(to.time.timeIntervalSince(from.time) / 2) }
+        /// Both ends are the same place: its line breaks here, and the
+        /// faint dashed "no data" bridge stands in for it. Between two
+        /// places nothing is drawn across — that would join them.
+        var isBridged: Bool { from.placeKey == to.placeKey }
     }
 
-    /// Stretches with no readings longer than `threshold` seconds — drawn as
-    /// a dashed "no data" bridge instead of being silently skipped.
+    /// Stretches longer than `threshold` seconds in which *nothing* was
+    /// recorded, at any place. (A place's line also breaks where the sensor
+    /// was somewhere else for that long, but that isn't "no data".)
     nonisolated static func gaps(_ points: [ChartPoint], threshold: TimeInterval) -> [Gap] {
         let sorted = points.sorted { $0.time < $1.time }
         var out: [Gap] = []
@@ -328,6 +342,9 @@ struct HistoryBody: View {
     }
 
     static let symbols: [BasicChartSymbolShape] = [.circle, .square, .triangle, .diamond, .pentagon, .cross]
+    /// A stretch of one reading: a small dot, the same in every mode (with
+    /// the place's shape when colour alone mustn't carry it).
+    static let loneSymbolSize: CGFloat = 20
     static let dashes: [[CGFloat]] = [[], [6, 3], [1.5, 3], [8, 3, 1.5, 3], [3, 3], [10, 4]]
 
     private func chart(_ model: HistoryModel) -> some View {
@@ -338,7 +355,6 @@ struct HistoryBody: View {
         let selected = selectedTime.flatMap { model.nearest(to: $0) }
         let values = model.points.map(\.value)
         let co2Scale = TraceScale(values: values, limit: limit)
-        let gaps = Self.gaps(model.points, threshold: Double(max(range.bucketMinutes, intervalMinutes)) * 60 * 3)
         return Chart {
             if metric == .co2 && co2Scale.showsLimit {
                 RuleMark(y: .value("Limit", limit))
@@ -348,53 +364,55 @@ struct HistoryBody: View {
                         Text("limit \(Metric.co2.format(limit))").font(.caption2).foregroundStyle(Ink.shu)
                     }
             }
-            // One line per *visit*: colour says which place, but a new
-            // segment starts whenever the sensor moved or the app was closed,
-            // so lines never bridge hours that weren't observed. A visit of
-            // a single point gets a dot, which a line can't draw.
+            // One line per stretch of a place: colour says which place, and
+            // a place's line breaks wherever *its* readings pause for longer
+            // than the range's gap (`segmentGap`), so a line never bridges
+            // time that wasn't observed. The series is a string unique to
+            // that stretch — never a bare number, which Charts may not treat
+            // as a category, joining every stretch of a place into one curve.
+            // `.monotone` can't overshoot past the readings the way
+            // Catmull-Rom does. A stretch of one point is a dot.
             ForEach(model.points) { p in
                 let place = names[p.placeKey] ?? p.place
                 let index = seriesIndex(p.placeKey, in: model)
-                if differentiateWithoutColor {
-                    // Shape and dash carry the place too, not colour alone.
-                    if p.isSingle {
-                        PointMark(x: .value("Time", p.time), y: .value(metric.title, p.value))
-                            .foregroundStyle(by: .value("Place", place))
-                            .symbol(by: .value("Place", place))
-                            .symbolSize(30)
-                    } else {
-                        LineMark(x: .value("Time", p.time), y: .value(metric.title, p.value),
-                                 series: .value("Visit", p.segment))
-                            .foregroundStyle(by: .value("Place", place))
-                            .lineStyle(StrokeStyle(lineWidth: 1.4, dash: Self.dashes[index % Self.dashes.count]))
-                            .interpolationMethod(.catmullRom)
-                            .symbol(by: .value("Place", place))
-                            .symbolSize(14)
-                    }
-                } else if p.isSingle {
+                if p.isSingle {
                     PointMark(x: .value("Time", p.time), y: .value(metric.title, p.value))
                         .foregroundStyle(by: .value("Place", place))
-                        .symbolSize(18)
+                        .symbol(by: .value("Place", place))
+                        .symbolSize(Self.loneSymbolSize)
+                } else if differentiateWithoutColor {
+                    // Shape and dash carry the place too, not colour alone.
+                    LineMark(x: .value("Time", p.time), y: .value(metric.title, p.value),
+                             series: .value("Line", p.series))
+                        .foregroundStyle(by: .value("Place", place))
+                        .lineStyle(StrokeStyle(lineWidth: 1.4, dash: Self.dashes[index % Self.dashes.count]))
+                        .interpolationMethod(.monotone)
+                        .symbol(by: .value("Place", place))
+                        .symbolSize(14)
                 } else {
                     LineMark(x: .value("Time", p.time), y: .value(metric.title, p.value),
-                             series: .value("Visit", p.segment))
+                             series: .value("Line", p.series))
                         .foregroundStyle(by: .value("Place", place))
                         .lineStyle(StrokeStyle(lineWidth: 1.4))
-                        .interpolationMethod(.catmullRom)
+                        .interpolationMethod(.monotone)
                 }
             }
 
-            // Hours with no readings (the app was closed, or not in front):
-            // a faint dashed bridge, labelled when the gap is wide enough.
-            ForEach(gaps) { gap in
-                LineMark(x: .value("Time", gap.from.time), y: .value(metric.title, gap.from.value),
-                         series: .value("Gap", "gap-\(gap.id)"))
-                    .foregroundStyle(Ink.inkFaint)
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 4]))
-                LineMark(x: .value("Time", gap.to.time), y: .value(metric.title, gap.to.value),
-                         series: .value("Gap", "gap-\(gap.id)"))
-                    .foregroundStyle(Ink.inkFaint)
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 4]))
+            // Stretches with no readings at all (the app was closed, or not
+            // in front): a place's line resumes after a faint dashed bridge,
+            // labelled when the gap is wide enough. Never drawn from one
+            // place to another.
+            ForEach(model.gaps) { gap in
+                if gap.isBridged {
+                    LineMark(x: .value("Time", gap.from.time), y: .value(metric.title, gap.from.value),
+                             series: .value("Line", "gap-\(gap.id)"))
+                        .foregroundStyle(Ink.inkFaint)
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 4]))
+                    LineMark(x: .value("Time", gap.to.time), y: .value(metric.title, gap.to.value),
+                             series: .value("Line", "gap-\(gap.id)"))
+                        .foregroundStyle(Ink.inkFaint)
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 4]))
+                }
                 if gap.to.time.timeIntervalSince(gap.from.time) > range.seconds * 0.12 {
                     PointMark(x: .value("Time", gap.middle), y: .value(metric.title, (gap.from.value + gap.to.value) / 2))
                         .opacity(0)
@@ -529,8 +547,11 @@ struct HistoryBody: View {
         let value: Double
         let placeKey: String
         let place: String
+        /// Which stretch of its place this point is on: 0, 1, 2 … per place.
         let segment: Int
-        /// The only point of its visit — drawn as a dot.
+        /// The line this point is drawn on — unique to (place, stretch).
+        var series: String { "\(placeKey)#\(segment)" }
+        /// The only point of its stretch — drawn as a dot.
         var isSingle: Bool
 
         static func id(placeKey: String, time: Date) -> String {
@@ -538,34 +559,42 @@ struct HistoryBody: View {
         }
     }
 
-    /// The longest pause that still counts as one visit: three buckets, but
-    /// never less than three recording intervals — at 10-minute logging a
-    /// 1-minute bucket would otherwise break every sample into its own visit.
+    /// The longest pause that still counts as one stretch: three buckets,
+    /// but never less than three recording intervals — at 10-minute logging
+    /// a 1-minute bucket would otherwise break every sample into its own
+    /// line. 3 h: 3 min, 24 h: 15 min, 7 d: 90 min, 30 d: 6 h (at 1-minute
+    /// logging).
     nonisolated static func segmentGap(bucketMinutes: Int, intervalMinutes: Int) -> TimeInterval {
         Double(max(bucketMinutes, intervalMinutes)) * 60 * 3
     }
 
-    /// Split a time-ordered series into visits: a new segment on every place
-    /// change or on any gap longer than `gap` seconds. Rows without a value
-    /// for `metric` are skipped.
+    /// Split each place's readings into stretches: a new one wherever two
+    /// consecutive readings *of that place* are more than `gap` seconds
+    /// apart. Other places' readings in between don't break it. Rows without
+    /// a value for `metric` are skipped. The result stays in time order.
     nonisolated static func segments(_ rows: [Row], gap: TimeInterval, metric: Metric = .co2) -> [ChartPoint] {
         var out: [ChartPoint] = []
-        var segment = 0
-        var previous: Row?
-        var countInSegment = 0
+        struct Open { var index: Int; var time: Date; var segment: Int; var count: Int }
+        var open: [String: Open] = [:]
         for r in rows.sorted(by: { $0.time < $1.time }) {
             guard let v = r.value(metric) else { continue }
-            if let p = previous, p.placeKey != r.placeKey || r.time.timeIntervalSince(p.time) > gap {
-                if countInSegment == 1 { out[out.count - 1].isSingle = true }
-                segment += 1
-                countInSegment = 0
+            let key = r.placeKey
+            var segment = 0
+            var count = 0
+            if let o = open[key] {
+                if r.time.timeIntervalSince(o.time) > gap {
+                    if o.count == 1 { out[o.index].isSingle = true }
+                    segment = o.segment + 1
+                } else {
+                    segment = o.segment
+                    count = o.count
+                }
             }
-            out.append(ChartPoint(id: ChartPoint.id(placeKey: r.placeKey, time: r.time), time: r.time, value: v,
-                                  placeKey: r.placeKey, place: r.place, segment: segment, isSingle: false))
-            countInSegment += 1
-            previous = r
+            out.append(ChartPoint(id: ChartPoint.id(placeKey: key, time: r.time), time: r.time, value: v,
+                                  placeKey: key, place: r.place, segment: segment, isSingle: false))
+            open[key] = Open(index: out.count - 1, time: r.time, segment: segment, count: count + 1)
         }
-        if countInSegment == 1 { out[out.count - 1].isSingle = true }
+        for o in open.values where o.count == 1 { out[o.index].isSingle = true }
         return out
     }
 }
@@ -632,30 +661,44 @@ private struct PlaceStatRow: View {
     let scaleMax: Double
 
     @ScaledMetric(relativeTo: .body) private var ensoSize: CGFloat = 30
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
+        // One line for name and average, or stacked when the text is too
+        // large for that — the same switch as the Now page's MetricsRow.
+        let large = dynamicTypeSize.isAccessibilitySize
+        let headline = large
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 6))
+        let details = large
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(spacing: 16))
         HStack(alignment: .center, spacing: 14) {
             EnsoRing(fraction: HistoryBody.ensoFraction(metric: metric, average: average, scaleMax: scaleMax),
                      color: color, lineWidth: 3, animated: false)
                 .frame(width: ensoSize, height: ensoSize)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    if let symbol {
-                        symbol.fill(color)
-                            .frame(width: 8, height: 8)
-                            .accessibilityHidden(true)
+                headline {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        if let symbol {
+                            symbol.fill(color)
+                                .frame(width: 8, height: 8)
+                                .accessibilityHidden(true)
+                        }
+                        Text(stats.place).font(Typeface.body).foregroundStyle(Ink.ink)
                     }
-                    Text(stats.place).font(Typeface.body).foregroundStyle(Ink.ink)
-                    Spacer()
-                    Text("avg").kukiLabel()
-                    Text(metric.format(average))
-                        .font(.system(.title3).monospacedDigit())
-                        .foregroundStyle(Ink.ink)
-                    Text(metric.unit).font(.caption).foregroundStyle(Ink.inkSoft)
+                    if !large { Spacer() }
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("avg").kukiLabel()
+                        Text(metric.format(average))
+                            .font(.system(.title3).monospacedDigit())
+                            .foregroundStyle(Ink.ink)
+                        Text(metric.unit).font(.caption).foregroundStyle(Ink.inkSoft)
+                    }
                 }
-                HStack(spacing: 16) {
-                    Text(String(format: "%.1f h observed", stats.hours))
+                details {
+                    Text("\(stats.hours.formatted(.number.precision(.fractionLength(1)))) h observed")
                     if metric == .co2 {
                         if let peak = stats.peakCO2 { Text("peak \(Metric.co2.format(peak))") }
                         if let share = stats.shareOverLimit {

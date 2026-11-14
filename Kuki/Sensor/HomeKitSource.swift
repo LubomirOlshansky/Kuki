@@ -8,8 +8,19 @@ struct SensorInfo: Identifiable, Equatable {
     let id: UUID
     let name: String
     let room: String
+    /// The Apple Home home it was found in.
+    var home: String = ""
     let manufacturer: String
     let isReachable: Bool
+
+    init(id: UUID, name: String, room: String, home: String = "", manufacturer: String, isReachable: Bool) {
+        self.id = id
+        self.name = name
+        self.room = room
+        self.home = home
+        self.manufacturer = manufacturer
+        self.isReachable = isReachable
+    }
 }
 
 /// Reads air sensors (e.g. IKEA ALPSTUGA added to Apple Home) through HomeKit.
@@ -26,7 +37,12 @@ final class HomeKitSource: NSObject {
         case ready
     }
 
-    private(set) var status: Status = .starting
+    private(set) var status: Status = .starting {
+        didSet { if status != oldValue { statusChangedAt = .now } }
+    }
+    /// When `status` last changed — the onboarding holds "none found" until
+    /// it has been stable for a moment.
+    private(set) var statusChangedAt = Date.now
     private(set) var sensors: [SensorInfo] = []
     private(set) var snapshots: [UUID: SensorSnapshot] = [:]
 
@@ -50,8 +66,31 @@ final class HomeKitSource: NSObject {
 
     private static let wanted: Set<String> = [co2Type, tempType, humidityType, pm25Type, airQualityType]
 
+    /// granted / denied / not_determined, for analytics. Not asked yet (no
+    /// `HMHomeManager`) counts as not determined.
+    var accessState: String {
+        guard let manager else { return "not_determined" }
+        let status = manager.authorizationStatus
+        if status.contains(.authorized) { return "granted" }
+        if status.contains(.determined) { return "denied" }
+        return "not_determined"
+    }
+
+    /// Home access is restricted (e.g. Screen Time), not merely refused.
+    var isRestricted: Bool { manager?.authorizationStatus.contains(.restricted) ?? false }
+
+    /// Whether Apple Home has been asked (an `HMHomeManager` exists).
+    var isStarted: Bool { manager != nil || dryRunStarted }
+
+    /// Tests: `start()` records the request without creating an
+    /// `HMHomeManager`, so no system prompt appears in the test host.
+    @ObservationIgnored var dryRun = false
+    @ObservationIgnored private var dryRunStarted = false
+
     func start() {
-        guard manager == nil else { return }
+        guard manager == nil, !dryRunStarted else { return }
+        if dryRun { dryRunStarted = true; return }
+        statusChangedAt = .now
         let manager = HMHomeManager()
         manager.delegate = self
         self.manager = manager
@@ -87,6 +126,21 @@ final class HomeKitSource: NSObject {
         }
     }
 
+    /// "Check again": look at the homes once more and ask every sensor.
+    func recheck() {
+        rescan()
+        Task { await refresh() }
+    }
+
+    #if !targetEnvironment(macCatalyst)
+    /// Apple's own Add Accessory sheet (iOS 15.4+). The user may cancel; then
+    /// nothing happens. New accessories also arrive through `home(_:didAdd:)`.
+    func addAccessory() async throws {
+        _ = try await HMAccessorySetupManager().performAccessorySetup(using: HMAccessorySetupRequest())
+        recheck()
+    }
+    #endif
+
     // MARK: - Discovery
 
     private func rescan() {
@@ -102,10 +156,12 @@ final class HomeKitSource: NSObject {
         }
 
         var found: [UUID: HMAccessory] = [:]
+        var homeNames: [UUID: String] = [:]
         for home in manager.homes {
             home.delegate = self
             for accessory in home.accessories where isAirSensor(accessory) {
                 found[accessory.uniqueIdentifier] = accessory
+                homeNames[accessory.uniqueIdentifier] = home.name
             }
         }
         accessories = found
@@ -114,6 +170,7 @@ final class HomeKitSource: NSObject {
                 SensorInfo(id: a.uniqueIdentifier,
                            name: a.name,
                            room: a.room?.name ?? "",
+                           home: homeNames[a.uniqueIdentifier] ?? "",
                            manufacturer: a.manufacturer ?? "",
                            isReachable: a.isReachable)
             }

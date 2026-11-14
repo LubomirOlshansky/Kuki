@@ -45,7 +45,21 @@ private func insertReading(_ context: ModelContext, _ time: Date, sensor: String
 @MainActor
 private final class FakeOutbox: SyncOutbox {
     var saves: [SyncRecordName] = []
-    func enqueueSaves(_ names: [SyncRecordName]) { saves += names }
+    var deletes: [SyncRecordName] = []
+    var sendSoonCalls = 0
+    /// false = the engine isn't running.
+    var accepts = true
+    func enqueueSaves(_ names: [SyncRecordName]) -> Bool {
+        guard accepts else { return false }
+        saves += names
+        return true
+    }
+    func enqueueDeletes(_ names: [SyncRecordName]) -> Bool {
+        guard accepts else { return false }
+        deletes += names
+        return true
+    }
+    func sendSoon() { sendSoonCalls += 1 }
     var chunkHours: [Int] { saves.compactMap { if case let .chunk(_, h) = $0 { h } else { nil } } }
 }
 
@@ -499,6 +513,233 @@ struct SensorStateSyncTests {
         core.applyPendingState()
         #expect(recorder.currentPlaceID == attic)
         #expect(core.ledger.pendingRemoteState == nil)
+    }
+}
+
+// MARK: - Sending soon, retries, deletes
+
+@Suite("Sync — send after a move")
+struct SendAfterMoveTests {
+    @MainActor @Test func aMoveIsQueuedAndSentSoon() async throws {
+        let container = try syncContainer()
+        let clock = Clock(t0)
+        let recorder = Recorder(defaults: syncDefaults(), clock: { clock.now })
+        recorder.configure(container: container)
+        let outbox = FakeOutbox()
+        let core = makeCore(container, clock: clock, outbox: outbox)
+        core.recorder = recorder
+        let hooks = HooksToCore(core) // the recorder holds its hooks weakly
+        recorder.syncHooks = hooks
+        let places = core.livePlaces()
+
+        // iCloud already knows an older move from another device.
+        core.applyRemoteState(RemoteSensorState(placeID: places[0].id, changedAt: t0.addingTimeInterval(-600)))
+        outbox.saves = []
+        clock.now = t0.addingTimeInterval(60)
+        recorder.move(to: places[2])
+        #expect(outbox.saves == [.sensorState])
+        #expect(outbox.sendSoonCalls == 1, "sent without waiting for the background")
+        let record = await core.record(for: .sensorState)
+        #expect(record.flatMap(SyncRecords.state(from:)) == RemoteSensorState(placeID: places[2].id, changedAt: clock.now),
+                "a local move is newer than what iCloud holds, so it builds")
+        withExtendedLifetime(hooks) {}
+    }
+
+    @MainActor @Test func aMoveReportsWhetherItWasQueued() throws {
+        let container = try syncContainer()
+        let clock = Clock(t0)
+        let recorder = Recorder(defaults: syncDefaults(), clock: { clock.now })
+        recorder.configure(container: container)
+        let outbox = FakeOutbox()
+        let core = makeCore(container, clock: clock, outbox: outbox)
+        core.recorder = recorder
+        let place = core.livePlaces()[1]
+        recorder.move(to: place)
+
+        outbox.accepts = false // engine not running
+        #expect(core.placeMoved(to: place.id, at: t0) == false)
+        #expect(outbox.sendSoonCalls == 0)
+        core.outbox = nil // sync off
+        #expect(core.placeMoved(to: place.id, at: t0) == false)
+        core.outbox = outbox
+        outbox.accepts = true
+        #expect(core.placeMoved(to: place.id, at: t0))
+        #expect(outbox.sendSoonCalls == 1)
+    }
+
+    @MainActor @Test func aMoveIsNotQueuedWhenICloudHoldsANewerOne() async throws {
+        let container = try syncContainer()
+        let clock = Clock(t0)
+        let recorder = Recorder(defaults: syncDefaults(), clock: { clock.now })
+        recorder.configure(container: container)
+        let outbox = FakeOutbox()
+        let core = makeCore(container, clock: clock, outbox: outbox)
+        core.recorder = recorder
+        let places = core.livePlaces()
+        recorder.move(to: places[1]) // at t0
+        // A record from a device whose clock runs ahead (only the server's copy is noted).
+        let server = SyncRecords.newRecord(.sensorState, systemFields: nil)
+        SyncRecords.fill(server, with: RemoteSensorState(placeID: places[1].id, changedAt: t0.addingTimeInterval(30)))
+        core.noteServerCopy(server)
+        #expect(core.placeMoved(to: places[1].id, at: t0) == false)
+        #expect(outbox.saves.isEmpty)
+        #expect(await core.record(for: .sensorState) == nil)
+        if case let .failure(reason) = await core.buildRecord(for: .sensorState) {
+            #expect(reason.text.contains("iCloud already holds"))
+        } else {
+            Issue.record("expected a skip reason")
+        }
+    }
+
+    @MainActor @Test func theDebouncerRunsOnceAfterABurst() async throws {
+        let debouncer = SendDebouncer(delay: .milliseconds(50))
+        var runs = 0
+        for _ in 0..<3 { debouncer.schedule { runs += 1 } }
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(runs == 1)
+        debouncer.schedule { runs += 1 }
+        debouncer.cancel()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(runs == 1, "a cancelled send doesn't run")
+    }
+
+    @MainActor @Test func aMissingServerStateIsSentAgain() throws {
+        let container = try syncContainer()
+        let clock = Clock(t0)
+        let recorder = Recorder(defaults: syncDefaults(), clock: { clock.now })
+        recorder.configure(container: container)
+        let outbox = FakeOutbox()
+        let core = makeCore(container, clock: clock, outbox: outbox)
+        core.recorder = recorder
+        recorder.move(to: core.livePlaces()[1])
+        let sent = SyncRecords.newRecord(.sensorState, systemFields: nil)
+        SyncRecords.fill(sent, with: RemoteSensorState(placeID: core.livePlaces()[1].id, changedAt: t0))
+        core.didSend([sent])
+        #expect(core.ledger.stateServerKnown)
+
+        core.noteStateMissingOnServer()
+        #expect(outbox.saves == [.sensorState])
+        #expect(outbox.sendSoonCalls == 1)
+        #expect(!core.ledger.stateServerKnown)
+    }
+}
+
+/// The recorder → core wiring HistorySync does in the app.
+@MainActor
+private final class HooksToCore: RecorderSyncHooks {
+    let core: SyncCore
+    init(_ core: SyncCore) { self.core = core }
+    func recorderDidRecord(at time: Date, sensorName: String) { core.noteRecorded(at: time, sensorName: sensorName) }
+    func recorderDidMove(to placeID: UUID, at time: Date) { core.placeMoved(to: placeID, at: time) }
+    func recorderDidEditPlace(_ place: Place) { core.placeEdited(place) }
+    func recorderDidDeletePlace(_ place: Place) {}
+    func recorderWillDeleteAllReadings() { core.ownHistoryWillBeDeleted() }
+}
+
+@Suite("Sync — failed saves")
+struct RetryBookTests {
+    @Test func unknownErrorsAreRetriedABoundedNumberOfTimes() {
+        var book = SaveRetryBook(maxAttempts: 3)
+        #expect(book.failed("a") == (1, true))
+        #expect(book.failed("a") == (2, true))
+        #expect(book.problem == nil, "still trying")
+        #expect(book.failed("a") == (3, false), "the third failure gives up")
+        #expect(book.problem == "A change couldn't be saved to iCloud")
+        #expect(book.failed("b") == (1, true), "counted per record")
+        _ = book.failed("b"); _ = book.failed("b")
+        #expect(book.problem == "2 changes couldn't be saved to iCloud")
+
+        book.succeeded(["a"])
+        #expect(book.gaveUp == ["b"])
+        #expect(book.failed("a") == (1, true), "a record that went through starts afresh")
+        book.succeeded(["a", "b"])
+        #expect(book.problem == nil)
+        #expect(book.attempts.isEmpty)
+    }
+}
+
+@Suite("Sync — deleting history")
+struct DeleteHistoryTests {
+    @MainActor @Test func deleteAllQueuesThisDevicesHoursAndHoldsBackTheOpenOne() async throws {
+        let container = try syncContainer()
+        let context = container.mainContext
+        let start = EpochHour.start(hour0)
+        insertReading(context, start.addingTimeInterval(10)) // pre-sync: ours
+        insertReading(context, start.addingTimeInterval(2 * 3600 + 5), origin: deviceA)
+        insertReading(context, start.addingTimeInterval(3 * 3600), origin: deviceB) // imported
+        insertReading(context, start.addingTimeInterval(4 * 3600), sensor: DemoSensor.name) // never uploaded
+        try context.save()
+        let clock = Clock(start.addingTimeInterval(2 * 3600 + 60))
+        let outbox = FakeOutbox()
+        let core = makeCore(container, clock: clock, outbox: outbox)
+        let recorder = Recorder(defaults: syncDefaults(), clock: { clock.now })
+        recorder.configure(container: container)
+        let hooks = HooksToCore(core) // the recorder holds its hooks weakly
+        recorder.syncHooks = hooks
+
+        recorder.deleteReadings(demoOnly: false)
+        #expect(outbox.deletes == [.chunk(deviceID: deviceA, epochHour: hour0),
+                                   .chunk(deviceID: deviceA, epochHour: hour0 + 2)])
+        #expect(outbox.sendSoonCalls == 1)
+        #expect(core.ledger.pendingChunkDeletes == [hour0, hour0 + 2])
+        #expect(try context.fetchCount(FetchDescriptor<Reading>()) == 0)
+
+        // Recording goes on in the hour being deleted: it waits for the delete.
+        insertReading(context, clock.now, origin: deviceA)
+        try context.save()
+        core.noteRecorded(at: clock.now, sensorName: "ALPSTUGA")
+        #expect(outbox.saves.isEmpty, "one request can't save and delete the same record")
+
+        core.didDelete([SyncRecordName.chunk(deviceID: deviceA, epochHour: hour0).name,
+                        SyncRecordName.chunk(deviceID: deviceA, epochHour: hour0 + 2).name])
+        #expect(core.ledger.pendingChunkDeletes.isEmpty)
+        #expect(outbox.chunkHours == [hour0 + 2], "the hour that filled up again goes up after its delete")
+        withExtendedLifetime(hooks) {}
+    }
+
+    @MainActor @Test func deleteDemoOnlyAndSyncOffTouchNothingInICloud() throws {
+        let container = try syncContainer()
+        let context = container.mainContext
+        insertReading(context, t0, origin: deviceA)
+        try context.save()
+        let clock = Clock(t0)
+        let core = makeCore(container, clock: clock, outbox: nil)
+        let recorder = Recorder(defaults: syncDefaults(), clock: { clock.now })
+        recorder.configure(container: container)
+        let hooks = HooksToCore(core) // the recorder holds its hooks weakly
+        recorder.syncHooks = hooks
+        recorder.deleteReadings(demoOnly: false)
+        #expect(core.ledger.pendingChunkDeletes.isEmpty, "sync off: nothing is queued")
+
+        let outbox = FakeOutbox()
+        core.outbox = outbox
+        recorder.deleteReadings(demoOnly: true)
+        #expect(outbox.deletes.isEmpty)
+        withExtendedLifetime(hooks) {}
+    }
+
+    @MainActor @Test func aFetchedChunkDeletionRemovesThatDevicesReadingsOnly() async throws {
+        let container = try syncContainer()
+        let context = container.mainContext
+        let start = EpochHour.start(hour0)
+        insertReading(context, start.addingTimeInterval(30), origin: deviceA) // ours, same hour
+        try context.save()
+        let clock = Clock(t0)
+        let core = makeCore(container, clock: clock, outbox: FakeOutbox())
+        let chunk = HourChunk(deviceID: deviceB, epochHour: hour0, sensorName: "ALPSTUGA",
+                              readings: (1...4).map { values(start.addingTimeInterval(Double($0) * 60 + 5)) })
+        let record = SyncRecords.newRecord(.chunk(deviceID: deviceB, epochHour: hour0), systemFields: nil)
+        try SyncRecords.fill(record, with: chunk)
+        #expect(await core.applyFetched([record]).imported == 4)
+
+        let removed = await core.applyFetchedDeletions([
+            SyncRecordName.chunk(deviceID: deviceB, epochHour: hour0).name,
+            SyncRecordName.chunk(deviceID: deviceA, epochHour: hour0).name, // our own: never applied here
+            "not-a-kuki-record",
+        ])
+        #expect(removed == 4)
+        let left = try context.fetch(FetchDescriptor<Reading>())
+        #expect(left.map(\.originDeviceID) == [deviceA])
     }
 }
 

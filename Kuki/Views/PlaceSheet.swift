@@ -34,7 +34,8 @@ struct PlaceSheet: View {
                                 if place.id == recorder.currentPlaceID {
                                     Image(systemName: "circle.fill")
                                         .font(.system(size: 7))
-                                        .foregroundStyle(Ink.matcha)
+                                        // Ink: "selected" isn't an air level, so no pigment.
+                                        .foregroundStyle(Ink.ink)
                                         .accessibilityHidden(true)
                                 }
                             }
@@ -81,6 +82,8 @@ struct PlaceSheet: View {
                         place.name = name
                         try? context.save()
                         recorder.placeEdited(place)
+                        Analytics.track("place_renamed")
+                        UsageAnalytics.shared.refreshProperties()
                     }
                     renaming = nil
                 }
@@ -88,7 +91,11 @@ struct PlaceSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        #if targetEnvironment(macCatalyst)
+        // The Mac sheet is a window that needs a floor; on iPhone this would
+        // be wider than a 375 pt screen, and the detents already size it.
         .frame(minWidth: 380, minHeight: 440)
+        #endif
     }
 
     private func rename(_ place: Place) {
@@ -104,6 +111,8 @@ struct PlaceSheet: View {
         context.insert(place)
         try? context.save()
         recorder.placeEdited(place)
+        Analytics.track("place_added", ["places_count": places.count + 1])
+        UsageAnalytics.shared.refreshProperties()
         newName = ""
         recorder.move(to: place)
         dismiss()
@@ -114,5 +123,11 @@ struct PlaceSheet: View {
         recorder.placeDeleted(place)
         context.delete(place)
         try? context.save()
+        // Deleting the sensor's place left it nowhere, and it recorded
+        // "Unplaced" until the next sync or launch: it starts again in the
+        // first place, the recorder's rule for a place that's gone.
+        recorder.placesDidChange()
+        Analytics.track("place_deleted", ["places_count": max(0, places.count - 1)])
+        UsageAnalytics.shared.refreshProperties()
     }
 }

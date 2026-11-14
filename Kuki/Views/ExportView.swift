@@ -9,6 +9,7 @@ struct ExportView: View {
     @State private var range: ExportRange = .week
     @State private var copied = false
     @State private var copying = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         ScrollView {
@@ -27,7 +28,11 @@ struct ExportView: View {
                     title: "For Claude or ChatGPT",
                     text: "A Markdown file with a short brief, a summary per place and the data averaged so it fits in a chat. Attach the file, or copy it and paste it into the conversation."
                 ) {
-                    HStack(spacing: 12) {
+                    // Side by side, or stacked when the text is too large for that.
+                    let pills = dynamicTypeSize.isAccessibilitySize
+                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+                        : AnyLayout(HStackLayout(spacing: 12))
+                    pills {
                         ShareLink(item: file(.markdown), preview: SharePreview("Kūki air log (Markdown)")) {
                             pill("Share file", systemImage: "doc.text")
                         }
@@ -63,7 +68,7 @@ struct ExportView: View {
 
     private func file(_ kind: ExportFile.Kind) -> ExportFile {
         ExportFile(kind: kind, since: range.start, limit: recorder.co2Limit, sensor: recorder.sensorName,
-                   filter: recorder.sensorFilter, container: context.container)
+                   filter: recorder.sensorFilter, container: context.container, reportRange: range.rawValue)
     }
 
     /// Building the brief reads every row in the period — do it off the
@@ -80,6 +85,7 @@ struct ExportView: View {
             copying = false
             guard let text else { return }
             UIPasteboard.general.string = text
+            UsageAnalytics.shared.exportPerformed(format: .markdown, action: "copy_text", range: range.rawValue)
             copied = true
             try? await Task.sleep(for: .seconds(2))
             copied = false
@@ -101,6 +107,7 @@ struct ExportView: View {
             .foregroundStyle(Ink.ink)
             .padding(.horizontal, 18)
             .padding(.vertical, 10)
+            .frame(minHeight: 44) // a full tap target; 10 pt padding alone was ~40
             .overlay(Capsule().stroke(Ink.hairline, lineWidth: 1))
             .contentShape(Capsule())
             .quietHover(Capsule())

@@ -143,7 +143,8 @@ final class MenuBarBridge {
             symbols: shown.map(\.symbol),
             values: shown.map { m in shownSnapshot.map { m.compact(m.value(of: $0)) } ?? "—" },
             labels: shown.map { m in
-                paused ? "\(m.spoken(snapshot.flatMap { m.value(of: $0) })), paused while Kūki is in the background"
+                // Paused: the controller says "Paused" once, for the whole item.
+                paused ? m.spoken(snapshot.flatMap { m.value(of: $0) })
                     : stale ? "\(m.title) unavailable, sensor out of reach" : m.spoken(live.flatMap { m.value(of: $0) })
             },
             alert: paused ? -1 : alert,
@@ -201,10 +202,20 @@ final class MenuBarBridge {
 
     private func handle(_ action: String) {
         guard let recorder else { return }
+        // The menu opened: a sample for analytics, not a request.
+        if action == "menuOpened" {
+            UsageAnalytics.shared.menuBarMenuOpened()
+            return
+        }
+        // Until the introduction is done, every action just brings it forward.
+        guard UserDefaults.standard.bool(forKey: OnboardingKeys.hasCompleted) else {
+            showWindow()
+            return
+        }
         if action.hasPrefix("place:"),
            let id = UUID(uuidString: String(action.dropFirst(6))),
            let place = try? container?.mainContext.fetch(FetchDescriptor<Place>(predicate: #Predicate { $0.id == id })).first {
-            recorder.move(to: place)
+            recorder.move(to: place, via: "menu_bar")
             return
         }
         switch action {
@@ -214,6 +225,7 @@ final class MenuBarBridge {
             showWindow()
             recorder.stationMode = true
         case "settings":
+            Analytics.track("settings_opened", ["via": "menu"])
             WindowRouter.shared.show(WindowID.settings, using: WindowRouter.shared.openWindow)
         default:
             break

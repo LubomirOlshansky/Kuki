@@ -31,7 +31,7 @@ struct AirLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     VStack(alignment: .trailing, spacing: 2) {
-                        if let t = s.temperature { Text(String(format: "%.1f°", t)).font(.caption.monospacedDigit()) }
+                        if let t = s.temperature { Text(oneDecimal(t) + "°").font(.caption.monospacedDigit()) }
                         if let h = s.humidity { Text("\(Int(h.rounded()))%").font(.caption.monospacedDigit()) }
                     }
                     .padding(.trailing, 4)
@@ -83,14 +83,14 @@ private struct LockScreenAir: View {
                         .foregroundStyle(stale ? Ink.inkSoft : level.color)
                     Text(stale ? "Last reading" : level.title).font(.headline.weight(.regular)).foregroundStyle(Ink.ink)
                 }
-                Text(stale ? "No new reading from your Mac yet." : level.advice)
+                Text(stale ? "No new reading. Open Kūki to update." : level.advice)
                     .font(.footnote).foregroundStyle(Ink.inkSoft).lineLimit(2)
                 HStack(spacing: 10) {
                     if !state.placeKanji.isEmpty {
                         Text(state.placeKanji).font(.custom("HiraMinProN-W3", size: 11)).foregroundStyle(Ink.inkSoft)
                     }
                     Text(state.placeName).font(.caption2).foregroundStyle(Ink.inkSoft)
-                    if let t = state.temperature { Text(String(format: "%.1f°", t)).font(.caption2.monospacedDigit()).foregroundStyle(Ink.inkSoft) }
+                    if let t = state.temperature { Text(oneDecimal(t) + "°").font(.caption2.monospacedDigit()).foregroundStyle(Ink.inkSoft) }
                     if let h = state.humidity { Text("\(Int(h.rounded()))%").font(.caption2.monospacedDigit()).foregroundStyle(Ink.inkSoft) }
                     Spacer(minLength: 0)
                     (Text(state.measuredAt, style: .relative) + Text(" ago"))
@@ -100,7 +100,15 @@ private struct LockScreenAir: View {
         }
         .padding(16)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("CO₂ \(Int(state.co2.rounded())) parts per million, \(stale ? "last reading" : level.title), \(state.placeName)")
+        .accessibilityLabel(spokenLabel(level))
+    }
+
+    /// "CO₂ 742 parts per million, Fine, temperature 21.4 degrees, humidity 47 percent, Living room"
+    private func spokenLabel(_ level: CO2Level) -> String {
+        var label = "CO₂ \(Int(state.co2.rounded())) parts per million, \(stale ? "last reading" : level.title)"
+        if let t = state.temperature { label += ", temperature \(oneDecimal(t)) degrees" }
+        if let h = state.humidity { label += ", humidity \(Int(h.rounded())) percent" }
+        return label + ", \(state.placeName)"
     }
 }
 

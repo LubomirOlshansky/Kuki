@@ -3,7 +3,7 @@
 One app record covers **iPhone, iPad and Mac** (same bundle ID `com.olshanskysoft.kuki`, so it's one purchase on all three). Team `S6PVT5UP7G`.
 
 Already done in the project:
-- Privacy manifests (`Kuki/PrivacyInfo.xcprivacy`, `KukiWidget/PrivacyInfo.xcprivacy`): no tracking, no data collected, two required-reason APIs declared.
+- Privacy manifests (`Kuki/PrivacyInfo.xcprivacy`, `KukiWidget/PrivacyInfo.xcprivacy`): no tracking; the app declares Product Interaction, Device ID and Coarse Location, all for Analytics, linked to the user (device ID), not tracking (Amplitude); two required-reason APIs declared. The Amplitude-Swift package ships its own manifest, which Xcode bundles automatically.
 - `ITSAppUsesNonExemptEncryption = NO`, so there's no export-compliance question at each upload.
 - Release builds verified for iPhone and Mac: no debug switches inside.
 - Privacy policy text: [`PRIVACY.md`](../PRIVACY.md).
@@ -56,25 +56,41 @@ The iCloud records Kūki uses exist only in the **Development** environment unti
 | Copyright | `2026 Lubomir Olshansky` |
 | Price | Free (Pricing and Availability) |
 
-**App Privacy** (the "nutrition label"): click **Get Started** › **"No, we do not collect data from this app"**. This is true: readings stay on the user's devices and in the user's own private iCloud.
+**App Privacy** (the "nutrition label"): click **Get Started** › **"Yes, we collect data from this app"**, then declare exactly these three (Kūki sends usage statistics, linked to a random device ID, to Amplitude, EU data centre; readings stay on the user's devices and in the user's own private iCloud):
+
+| Category › Data type | Purpose | Linked to the user? | Used for tracking? |
+|---|---|---|---|
+| Usage Data › **Product Interaction** | Analytics | Yes | No |
+| Identifiers › **Device ID** | Analytics | Yes | No |
+| Location › **Coarse Location** | Analytics | Yes | No |
+
+- *Product Interaction*: which features are used (tabs, exports, Station Mode, settings), never readings or names.
+- *Device ID*: Amplitude's device ID, the identifier for vendor. No IDFA, so no App Tracking Transparency prompt is needed.
+- *Coarse Location*: Amplitude derives country and city from the IP address. Kūki never asks for Location Services.
+- Linked: events carry a device ID, so they're declared linked (published 14 Nov 2026), although there's no account and no user ID. Not tracking: nothing is combined with other companies' data or used for advertising.
+
+Nothing else is collected (no contact info, no health data, no sensor readings, no diagnostics). The answers must match `Kuki/PrivacyInfo.xcprivacy` and `PRIVACY.md`; change all three together.
 
 ## 5. Store text
 
-**Description** (edit freely):
+**Description** (live in App Store Connect; iOS):
 
 > Kūki (空気, "air") shows how fresh the air is in the room where your sensor sits, quietly.
 >
-> Works with air-quality sensors in Apple Home, such as the IKEA ALPSTUGA: CO₂, temperature, humidity and PM2.5.
+> It works with air-quality sensors in Apple Home, such as the IKEA ALPSTUGA: CO₂, temperature, humidity and PM2.5.
+>
+> HOW IT RECORDS
+> Apple Home gives an iPhone or iPad app new readings only while it is open, so on its own your iPhone records while Kūki is open. For around-the-clock data, run Kūki on a Mac, where it lives in the menu bar, or leave a spare iPhone or iPad in Station Mode. Your iPhone's widgets, Lock Screen and alerts then follow along through iCloud.
 >
 > • An ensō brush circle that grows with CO₂, and plain advice: clear air, fine, getting stale, stuffy.
 > • Move the sensor between rooms and compare them: history per place, averages, peaks, time over your limit.
-> • A soft wind-chime when it's time to open a window.
-> • Widgets, Lock Screen and Live Activity.
-> • Mac: lives in the menu bar and records around the clock.
+> • A soft wind-chime when it's time to open a window: while Kūki is open, and usually also while it is closed when a Mac or Station device is recording.
+> • Widgets, Lock Screen and Live Activity show the latest reading; they stay current while a Mac or Station device records.
 > • Export to CSV, or an AI-ready summary for Claude or ChatGPT.
-> • Station Mode: leave a spare device on a charger and record around the clock.
 >
-> On iPhone and iPad, Kūki records while open (Apple Home only updates the app in front). No account, no tracking: your readings stay on your devices.
+> No account, no ads, no tracking: your readings stay on your devices and in your own iCloud. Usage statistics, linked only to a random device identifier, help improve Kūki; turn them off in Settings.
+
+The macOS description leads with the menu bar and 24/7 recording instead of "How it records".
 
 **Keywords** (≤ 100 chars): `co2,air quality,carbon dioxide,homekit,sensor,ventilation,humidity,pm2.5,indoor air,room`
 
@@ -98,7 +114,7 @@ To use demo data in the simulator, launch with: `xcrun simctl launch <device> co
 
 Reviewers won't own an air sensor. Paste this into **App Review Information › Notes**:
 
-> Kūki reads air-quality sensors (e.g. IKEA ALPSTUGA) through HomeKit. To review without a sensor: open **Settings** (iPhone: Settings tab; Mac: Kūki › Settings… or ⌘,) and turn on **Demo sensor**. Optional: tap **Add 3 days of demo history** to see History and Export. HomeKit access is used only to read sensor values; nothing is controlled or sent anywhere. With iCloud Sync on, the user's recorded history, place list and latest reading sync between their own devices through their private iCloud database.
+> Kūki reads air-quality sensors (e.g. IKEA ALPSTUGA) through HomeKit. No sensor needed: tap Skip, then Try the demo — or on 'How Kūki hears the air' choose 'No sensor yet? Try the demo'. Alternatively, open **Settings** (iPhone: Settings tab; Mac: Kūki › Settings… or ⌘,) and turn on **Demo sensor**. Optional: tap **Add 3 days of demo history** to see History and Export. HomeKit access is used only to read sensor values; nothing is controlled or sent anywhere. The optional airing reminder is a local notification at times the user picks; notification permission is asked only when it (or the CO₂ notification) is switched on. With iCloud Sync on, the user's recorded history, place list and latest reading sync between their own devices through their private iCloud database. Station Mode disables the idle timer only while it is shown. On the Mac, Kūki is a menu bar app that keeps a transparent 1-pt window so it stays active and HomeKit keeps delivering readings for continuous logging.
 
 Sign-in required: **No**. Contact: your name, phone and email.
 

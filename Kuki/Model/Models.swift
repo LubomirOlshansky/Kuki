@@ -26,6 +26,14 @@ final class Place {
         ("Study", "書斎"),
         ("Kitchen", "台所"),
     ]
+
+    /// Whether `name` is one of the seeded places. Those read as ordinary
+    /// nouns and take "the" in a sentence ("the Bedroom"); a name the user
+    /// typed ("Mum's room", "Office") is used bare.
+    static func isSeeded(_ name: String) -> Bool {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return defaults.contains { $0.0.compare(clean, options: .caseInsensitive) == .orderedSame }
+    }
 }
 
 /// One logged sample. The place is stored by id *and* name so exports stay
@@ -322,7 +330,7 @@ enum Metric: String, CaseIterable, Identifiable, Sendable {
         guard let v else { return "—" }
         switch self {
         case .co2: return String(Int(v.rounded()))
-        case .temperature: return String(format: "%.1f", v)
+        case .temperature: return v.formatted(.number.precision(.fractionLength(1)))
         case .humidity: return String(Int(v.rounded()))
         case .pm25: return String(Int(v.rounded()))
         }

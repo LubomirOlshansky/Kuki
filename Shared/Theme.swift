@@ -14,9 +14,17 @@ enum Ink {
     /// Decoration only (rules, tracks, redundant kanji) — never the sole carrier of text.
     static let inkFaint  = dynamic(light: 0x22211F, dark: 0xE9E4D8, alpha: 0.30, highContrastAlpha: 0.55)
     static let hairline  = dynamic(light: 0x22211F, dark: 0xE9E4D8, alpha: 0.12, highContrastAlpha: 0.30)
+    /// The track of a switch that's on. `ink` at night is cream, and a white
+    /// knob vanishes on it (1.3:1), so the night track is a warm grey: knob
+    /// 3.6:1 on the track, track 5.2:1 on night paper (4.7:1 on a grouped
+    /// row). By day it is ink (knob 16:1, track 14:1 on washi).
+    static let switchOn  = dynamic(light: 0x22211F, dark: 0x8A867D)
 
-    static let matcha    = dynamic(light: 0x5F7D4C, dark: 0x93B27B)
-    static let kincha    = dynamic(light: 0xA97A2C, dark: 0xD5A95A)
+    /// With Increase Contrast, the light pigments deepen so they clear 4.5:1 as
+    /// small text on washi: matcha 4.0 → 5.6:1, kincha 3.3 → 5.5:1 (≥ 5.0:1 on
+    /// `paperRaised`). Their night variants already clear 7:1.
+    static let matcha    = dynamic(light: 0x5F7D4C, dark: 0x93B27B, highContrastLight: 0x4A6639)
+    static let kincha    = dynamic(light: 0xA97A2C, dark: 0xD5A95A, highContrastLight: 0x7D5A1A)
     static let shu       = dynamic(light: 0xB23B26, dark: 0xE46B50)
     static let ai        = dynamic(light: 0x2E4868, dark: 0x93ADCD)
 
@@ -34,11 +42,15 @@ enum Ink {
 
     /// A colour that follows light/dark — and, through `highContrastAlpha`,
     /// the Increase Contrast setting, where the quiet greys step forward.
+    /// `highContrastLight` swaps in a deeper light-mode hue for pigments,
+    /// which can't simply step their alpha up the way the greys do.
     private static func dynamic(light: UInt32, dark: UInt32, alpha: CGFloat = 1,
-                                highContrastAlpha: CGFloat? = nil) -> Color {
+                                highContrastAlpha: CGFloat? = nil,
+                                highContrastLight: UInt32? = nil) -> Color {
         Color(UIColor { traits in
-            let hex = traits.userInterfaceStyle == .dark ? dark : light
-            let a = traits.accessibilityContrast == .high ? (highContrastAlpha ?? alpha) : alpha
+            let high = traits.accessibilityContrast == .high
+            let hex = traits.userInterfaceStyle == .dark ? dark : (high ? (highContrastLight ?? light) : light)
+            let a = high ? (highContrastAlpha ?? alpha) : alpha
             return UIColor(
                 red: CGFloat((hex >> 16) & 0xFF) / 255,
                 green: CGFloat((hex >> 8) & 0xFF) / 255,

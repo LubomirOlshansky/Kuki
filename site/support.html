@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Support — Kūki 空気</title>
+  <meta name="description" content="Help for Kūki: which sensors work, what you need in Apple Home, recording on iPhone and Mac, iCloud sync, export, and how to get in touch.">
+  <meta name="theme-color" content="#F3EFE6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121211" media="(prefers-color-scheme: dark)">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="stylesheet" href="/style.css?v=7">
+</head>
+<body>
+
+<header class="wrap top">
+  <a class="brand" href="/"><img src="/img/icon.png" alt="" width="32" height="32"> Kūki <span class="kanji" lang="ja">空気</span></a>
+  <nav aria-label="Main">
+    <a href="/#mac">Features</a>
+    <a href="/support" aria-current="page">Support</a>
+    <a href="/privacy">Privacy</a>
+  </nav>
+</header>
+
+<main class="wrap">
+  <article class="doc">
+    <header>
+      <h1>Support</h1>
+      <p class="meta">Everything about setting up Kūki, how it records, and where your data goes. Still stuck? <a href="#contact">Get in touch</a>.</p>
+    </header>
+
+    <nav class="toc" aria-label="On this page">
+      <p>On this page</p>
+      <ul>
+        <li><a href="#start">Getting started</a></li>
+        <li><a href="#hub">Do I need a hub?</a></li>
+        <li><a href="#recording">Recording</a></li>
+        <li><a href="#data">iCloud and your data</a></li>
+        <li><a href="#technical">Technical details</a></li>
+        <li><a href="#contact">Get in touch</a></li>
+      </ul>
+    </nav>
+
+    <div class="faq">
+      <h2 id="start">Getting started</h2>
+
+      <details open id="sensors">
+        <summary>Which sensors work?</summary>
+        <div class="answer">
+          <p>Kūki is made for the <b>IKEA ALPSTUGA</b> air-quality sensor. It also works with any other sensor in Apple Home that reports <b>CO₂</b>, <b>PM2.5</b> or <b>air quality</b>; temperature and humidity are read too when the sensor has them.</p>
+          <p>If you have more than one, choose which one Kūki follows in <b>Settings › Sensor</b>.</p>
+        </div>
+      </details>
+
+      <details open id="requirements">
+        <summary>What do I need?</summary>
+        <div class="answer">
+          <ul>
+            <li>An air sensor in the <b>Home app</b>, such as the IKEA ALPSTUGA. Add it once with an iPhone or iPad. Kūki reads it through Apple Home; no IKEA hub, app or cloud is needed.</li>
+            <li>For the <b>Mac</b>: a <b>home hub with Thread</b> (HomePod mini, HomePod 2nd generation, or an Apple TV 4K with Thread). See below.</li>
+            <li>A Mac with macOS 15 or later, or an iPhone or iPad with iOS 18 or later.</li>
+          </ul>
+          <p>The first time you open Kūki it asks for access to your Home. If you said no, allow it under <b>Privacy &amp; Security</b> in Settings (<b>HomeKit</b> on iPhone and iPad, <b>Home</b> in System Settings on the Mac).</p>
+        </div>
+      </details>
+
+      <details open id="hub">
+        <summary>Do I need a HomePod or Apple TV? Does the Mac need my iPhone?</summary>
+        <div class="answer">
+          <p>The ALPSTUGA talks <b>Matter over Thread</b>, a low-power radio network. Something with a Thread radio has to bridge it into Apple Home:</p>
+          <ul>
+            <li><b>Mac:</b> yes, you need a home hub with Thread: a HomePod mini, a HomePod (2nd generation) or an Apple TV 4K with Thread. Macs have no Thread radio, so the Mac reaches the sensor through the hub.</li>
+            <li><b>iPhone 15 Pro or later:</b> Apple Home on these iPhones can talk to Thread accessories directly, without a hub, while the iPhone is near the sensor. A hub still makes the connection steadier.</li>
+            <li><b>Older iPhones and iPads:</b> need the hub, like the Mac.</li>
+          </ul>
+          <p>The Mac doesn’t need your iPhone after setup. Your iPhone’s Thread radio only serves the iPhone itself; it doesn’t act as a bridge for other devices. With a hub, the Mac records on its own, around the clock, whether your iPhone is home or not.</p>
+        </div>
+      </details>
+
+      <details open id="not-found">
+        <summary>Kūki says “No air sensor found in Apple Home”</summary>
+        <div class="answer">
+          <ul>
+            <li>Open the <b>Home app</b> on the same device and check that the sensor is there and shows a reading. If the Home app can’t reach it, Kūki can’t either.</li>
+            <li>Make sure Kūki may use your Home: <b>Privacy &amp; Security › HomeKit</b> (Home on the Mac).</li>
+            <li>If you have more than one home, the sensor must be in a home this device can see.</li>
+            <li>On a Mac or an older iPhone, check that your HomePod or Apple TV is on and set as the home hub (Home app › Home Settings › Home Hubs &amp; Bridges).</li>
+          </ul>
+        </div>
+      </details>
+
+      <details open id="demo">
+        <summary>I don’t have a sensor yet. Can I try Kūki?</summary>
+        <div class="answer">
+          <p>Yes. Turn on <b>Settings › Demo sensor</b>. Kūki then shows a simulated sensor, and you can add three days of demo history to explore History and Export. Delete the demo data from the same section when you’re done.</p>
+        </div>
+      </details>
+
+      <h2 id="recording">Recording</h2>
+
+      <details open id="iphone">
+        <summary>Why does my iPhone only record while Kūki is open?</summary>
+        <div class="answer">
+          <p>Apple Home only gives sensor values to an app that’s active. When Kūki is in the background on iPhone or iPad, Apple Home stops answering it, so nothing can be recorded. History therefore shows the times Kūki was open, and gaps are drawn as <b>no data</b> rather than guessed.</p>
+          <p>For continuous data:</p>
+          <ul>
+            <li>Let a <b>Mac</b> record around the clock (see below) and turn on iCloud Sync, so your iPhone shows the same history.</li>
+            <li>Or leave a spare iPhone or iPad on a charger in <b>Station Mode</b>: a dim, always-awake screen that keeps Kūki in front.</li>
+          </ul>
+        </div>
+      </details>
+
+      <details open id="mac">
+        <summary>How does the Mac record 24/7?</summary>
+        <div class="answer">
+          <p>On the Mac, Kūki runs from the <b>menu bar</b>, which keeps it active, so it records around the clock, even with its window closed.</p>
+          <ul>
+            <li>Keep <b>Settings › Show in Dock</b> off. With a Dock icon, Kūki becomes a normal app and pauses in the background.</li>
+            <li>Turn on <b>Open at Login</b> so recording resumes after a restart.</li>
+            <li>Your Mac must be awake. Recording pauses while it sleeps.</li>
+          </ul>
+        </div>
+      </details>
+
+      <details open id="paused">
+        <summary>What do “Paused” and “Reaching your sensor…” mean?</summary>
+        <div class="answer">
+          <p><b>Paused</b> means Kūki can’t hear the sensor right now, usually because the app isn’t in front, and it tells you why instead of pretending the sensor vanished.</p>
+          <p><b>Reaching your sensor…</b> appears when you come back to Kūki while Apple Home reconnects. It usually takes 5–15 seconds. Kūki never records or alerts on an old value.</p>
+        </div>
+      </details>
+
+      <details open id="rooms">
+        <summary>How do rooms work?</summary>
+        <div class="answer">
+          <p>Tap the room name at the top of Now and choose where the sensor is. History is kept for each room, so you can compare them.</p>
+          <p>Right after a move, the CO₂ cell needs a few minutes to adapt. Those minutes count as <b>settling</b> and are left out of comparisons; set how long in <b>Settings › Recording</b>.</p>
+        </div>
+      </details>
+
+      <details open id="alert">
+        <summary>How do I change the CO₂ alert?</summary>
+        <div class="answer">
+          <p>In <b>Settings › Alert</b>, set your limit (1000 ppm by default, the usual “open a window” line) and turn the wind-chime sound and the notification on or off. The fūrin rings once per stuffy spell, then stays quiet until the air has clearly recovered.</p>
+        </div>
+      </details>
+
+      <h2 id="data">iCloud and your data</h2>
+
+      <details open id="icloud">
+        <summary>How do I turn iCloud Sync on or off?</summary>
+        <div class="answer">
+          <p>Use <b>Settings › iCloud Sync</b> on each device. When it’s on, the history each device records, your rooms and which room the sensor is in sync between your devices through your private iCloud, and the latest reading reaches your other devices’ widgets, Lock Screen and alerts.</p>
+          <p>Sync needs the same Apple Account with iCloud turned on on each device. Turning it off stops syncing; what is already in iCloud stays there until you remove it in <b>Settings › Apple Account › iCloud › Manage Storage</b>.</p>
+        </div>
+      </details>
+
+      <details open id="export">
+        <summary>How do I export my data?</summary>
+        <div class="answer">
+          <p><b>iPhone and iPad:</b> open the <b>Export</b> tab, choose a period (24 hours, 7 days, 30 days or all), then:</p>
+          <ul>
+            <li><b>For Claude or ChatGPT</b>: a Markdown brief with context, a summary per room and the data averaged to fit a chat. Share the file, or copy the text and paste it into the conversation.</li>
+            <li><b>Spreadsheet (CSV)</b>: every sample at full resolution, for Numbers, Excel or Google Sheets.</li>
+          </ul>
+          <p><b>Mac:</b> choose <b>File › Export CSV…</b> (<kbd>⇧⌘E</kbd>) or <b>File › Export for AI…</b> (<kbd>⌥⇧⌘E</kbd>). Both export the period History is showing.</p>
+        </div>
+      </details>
+
+      <details open id="delete">
+        <summary>How do I delete my data?</summary>
+        <div class="answer">
+          <p>In <b>Settings › Data</b>. Readings live only on your devices (and in your private iCloud if sync is on). The developer never receives any of it. See the <a href="/privacy">privacy policy</a>.</p>
+        </div>
+      </details>
+
+      <h2 id="technical">Technical details</h2>
+
+      <details open id="how">
+        <summary>How does a reading get from the sensor to Kūki?</summary>
+        <div class="answer">
+          <p><b>ALPSTUGA</b> → Matter over Thread → <b>Thread border router</b> (your HomePod or Apple TV, or the iPhone’s own radio) → <b>Apple Home</b> → HomeKit → <b>Kūki</b>.</p>
+          <p>Kūki reads five HomeKit values from any accessory that has them: carbon dioxide level, current temperature, current relative humidity, PM2.5 density and air quality. An accessory counts as an air sensor when it reports CO₂, PM2.5 or air quality. Kūki only reads; it never changes your accessories.</p>
+        </div>
+      </details>
+
+      <details open id="mac-tech">
+        <summary>How does the Mac app keep recording in the background?</summary>
+        <div class="answer">
+          <p>Apple Home only answers an app that’s active, on the Mac as on the iPhone. Kūki for Mac is a Mac Catalyst app with a small AppKit plug-in for the menu bar item. Without a Dock icon, it runs as a menu bar app and keeps a tiny invisible window open, which keeps it active, so Apple Home keeps answering, day and night.</p>
+          <p>Turn on <b>Show in Dock</b> and it becomes an ordinary app that pauses in the background. A sleeping Mac doesn’t record.</p>
+        </div>
+      </details>
+
+      <details open id="interval">
+        <summary>How often does Kūki record, and how fresh is a value?</summary>
+        <div class="answer">
+          <ul>
+            <li>It records every <b>1 minute</b> by default; choose 1, 2, 5 or 10 in <b>Settings › Recording</b>.</li>
+            <li>Every value carries the time Apple Home last really reported it. A value older than <b>10 minutes</b> is never recorded or alerted on, and gaps are drawn as <b>no data</b>.</li>
+            <li>After you move the sensor, the first <b>10 minutes</b> (adjustable) count as settling, because the CO₂ cell needs time to adapt. They’re recorded but left out of comparisons and alerts.</li>
+          </ul>
+        </div>
+      </details>
+
+      <details open id="levels">
+        <summary>What do the levels mean, and when does the alert ring?</summary>
+        <div class="answer">
+          <ul>
+            <li><b>Clear air</b> under 800 ppm · <b>Fine</b> 800–999 · <b>Getting stale</b> 1000–1399 · <b>Stuffy</b> 1400 and above. Outdoor air is about 420 ppm.</li>
+            <li>The alert limit is 1000 ppm by default (600–2000 ppm). The fūrin rings once when CO₂ reaches it, then stays quiet until CO₂ drops 100 ppm below the limit, and never more than once every 20 minutes.</li>
+            <li>The sound is on by default; notifications are off until you turn them on. In the Mac menu bar, ◐ marks stale air and ● stuffy air.</li>
+          </ul>
+        </div>
+      </details>
+
+      <details open id="storage">
+        <summary>Where is my data stored, and what does iCloud Sync send?</summary>
+        <div class="answer">
+          <p>Readings are stored on the device that recorded them. With iCloud Sync on, Kūki uses <b>your private iCloud database</b> (CloudKit): each device’s history in hourly chunks, your rooms and which room the sensor is in, plus the latest reading so your other devices’ widgets, Live Activity and alerts can follow a Mac that records around the clock. The developer can’t see any of it.</p>
+        </div>
+      </details>
+
+      <details open id="formats">
+        <summary>What’s in the exports?</summary>
+        <div class="answer">
+          <ul>
+            <li><b>CSV:</b> every sample at full resolution: time, room, CO₂, temperature, humidity, PM2.5, and whether the sensor was still settling.</li>
+            <li><b>Markdown for Claude or ChatGPT:</b> a short brief with context, a summary per room and the data averaged so it fits in a chat.</li>
+          </ul>
+        </div>
+      </details>
+
+      <details open id="widgets">
+        <summary>How do widgets and the Live Activity stay current?</summary>
+        <div class="answer">
+          <p>They show the latest reading Kūki has, from this device or, with iCloud Sync, from your Mac. When a reading gets old they fade instead of showing it as current. The Live Activity, Dynamic Island and StandBy are iPhone features.</p>
+        </div>
+      </details>
+    </div>
+
+    <div class="contact" id="contact">
+      <h2>Get in touch</h2>
+      <p>Found a bug or have a question? Open an issue on GitHub. Mention your device, its system version and your sensor.</p>
+      <p><a class="button" href="https://github.com/LubomirOlshansky/Kuki/issues">Open a GitHub issue</a></p>
+    </div>
+  </article>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="row">
+      <a class="brand" href="/"><img src="/img/icon.png" alt="" width="32" height="32"> Kūki <span class="kanji" lang="ja">空気</span></a>
+      <nav aria-label="Footer">
+        <a href="/support">Support</a>
+        <a href="/privacy">Privacy</a>
+        <a href="https://github.com/LubomirOlshansky/Kuki">Source on GitHub</a>
+      </nav>
+    </div>
+    <p class="fine">Kūki is an independent app and is not affiliated with IKEA. ALPSTUGA is a trademark of Inter IKEA Systems B.V. Apple, HomeKit, iPhone, iPad and Mac are trademarks of Apple Inc.</p>
+  </div>
+</footer>
+
+</body>
+</html>

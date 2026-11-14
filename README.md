@@ -68,13 +68,22 @@ git clone https://github.com/LubomirOlshansky/Kuki.git
 open Kuki/Kuki.xcodeproj
 ```
 
-Choose **My Mac (Mac Catalyst)** or your iPhone and press Run. The first launch asks for access to your Home.
+Choose **My Mac (Mac Catalyst)** or your iPhone and press Run. The first launch opens a short introduction; Kūki asks for access to your Home only when you choose **Connect Apple Home** there (or turn the demo sensor off).
 
 No sensor? Turn on **Settings › Demo sensor**. In Debug builds you can also launch with demo history:
 
 ```bash
 xcrun simctl launch booted com.olshanskysoft.kuki -useDemo YES -seedDemoOnLaunch YES
 ```
+
+Debug builds can show the introduction again (it doesn't reset the Home or notification permission; reinstall for that), or open it at one screen:
+
+```bash
+xcrun simctl launch booted com.olshanskysoft.kuki -resetOnboarding YES
+xcrun simctl launch booted com.olshanskysoft.kuki -resetOnboarding YES -onboardingStep night
+```
+
+Steps: `welcome questions breath night listen appleHome place furin plan`. Settings › Replay introduction shows it in any build.
 
 Tests (Swift Testing, 75 tests):
 
@@ -97,7 +106,11 @@ The Mac app is **Mac Catalyst**, because HomeKit on the Mac exists only for Cata
 
 ## Privacy
 
-No account, no analytics, no tracking. Readings stay on your devices. iCloud Sync, if on, keeps your history, places and latest reading in **your** private iCloud. See [PRIVACY.md](PRIVACY.md).
+No account, no ads, no tracking. Readings stay on your devices. iCloud Sync, if on, keeps your history, places and latest reading in **your** private iCloud.
+
+Kūki sends **usage statistics** to [Amplitude](https://amplitude.com) (EU data centre), tied to a random device identifier: which features are used, device and OS, app version and approximate location from the IP address. No account, and not used for tracking. Never readings, never place, room, sensor or home names. Users can turn it off in Settings › Privacy › *Share usage data*. See [PRIVACY.md](PRIVACY.md).
+
+Builds made from a fork send nothing: `Kuki/Analytics/AnalyticsConfig.swift` only starts the SDK under the bundle ID `com.olshanskysoft.kuki`, and never under XCTest. Debug builds report to the "Kūki DEV" project, Release builds to "Kūki PROD". The event catalogue lives in `Kuki/Analytics/`.
 
 ## Releasing
 

@@ -51,6 +51,13 @@ enum SyncSchema {
     /// Periodic fetch while the app runs (the Mac records around the clock
     /// and may not get every push).
     static let periodicFetch: TimeInterval = 15 * 60
+    /// After a move (or a delete) here, send this soon rather than waiting
+    /// for the engine's own schedule or the app going to the background. A
+    /// quick change of mind within it goes up once.
+    static let sendSoonDelay: Duration = .seconds(3)
+    /// A save that fails for a reason the engine doesn't retry itself is
+    /// tried this many times in all, then given up on (and shown).
+    static let maxSaveAttempts = 3
 }
 
 /// What a record name in the KukiHistory zone stands for.

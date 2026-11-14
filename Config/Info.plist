@@ -6,6 +6,10 @@
 	<false/>
 	<key>KukiCloudContainer</key>
 	<string>$(KUKI_CLOUD_CONTAINER)</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>com.apple.home</string>
+	</array>
 	<key>NSHomeKitUsageDescription</key>
 	<string>Kūki reads the CO₂, temperature, humidity and particle levels from your air quality sensor in Apple Home.</string>
 	<key>NSSupportsLiveActivities</key>

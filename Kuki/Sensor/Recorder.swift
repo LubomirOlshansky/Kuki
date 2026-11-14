@@ -15,6 +15,8 @@ final class Recorder {
     /// Remembers which place the ensō last painted for, so its one
     /// orchestrated moment survives tab switches and window resizes.
     let ensoPaint = EnsoPaintMemory()
+    /// The opt-in airing reminder (time-based local notifications).
+    let reminders: AiringReminders
 
     // MARK: Settings (persisted)
 
@@ -31,7 +33,8 @@ final class Recorder {
     var useDemo: Bool {
         didSet {
             defaults.set(useDemo, forKey: Keys.demo)
-            if !useDemo, context != nil { homeKit.start() }
+            // Turning the demo off *is* asking for Apple Home: a contextual request.
+            if !useDemo, context != nil { connectHomeKit() }
             lastRecordedAt = nil
             updateStaleness()
         }
@@ -56,6 +59,15 @@ final class Recorder {
     }
     private(set) var currentPlaceID: UUID? { didSet { defaults.set(currentPlaceID?.uuidString, forKey: Keys.place) } }
     private(set) var placeChangedAt: Date { didSet { defaults.set(placeChangedAt, forKey: Keys.placeChangedAt) } }
+    /// The user has asked Kūki to use Apple Home (the onboarding primer, or
+    /// the demo turned off). Until then HomeKit is never touched, so its
+    /// system prompt can't appear unexplained at first launch.
+    private(set) var homeKitRequested: Bool {
+        didSet { defaults.set(homeKitRequested, forKey: Keys.homeKitRequested) }
+    }
+    /// While the introduction is still choosing a sensor and a place, nothing
+    /// is recorded and nothing rings. Not persisted.
+    var holdRecording = false
 
     // MARK: Live state
 
@@ -69,14 +81,16 @@ final class Recorder {
     private(set) var isCatchingUp = false
     /// The user asked for notifications but the system said no.
     private(set) var notificationsDenied = false
-    var lastAlertAt: Date? { alertGate.lastAlertAt }
+    var lastAlertAt: Date? { AlertGate.load(from: defaults).lastAlertAt }
     var stationMode = false {
-        didSet { applyStationMode() }
+        didSet {
+            applyStationMode()
+            if stationMode != oldValue { reportStationMode() }
+        }
     }
 
     @ObservationIgnored private var context: ModelContext?
     @ObservationIgnored private var loop: Task<Void, Never>?
-    @ObservationIgnored private var alertGate = AlertGate()
     @ObservationIgnored private var lastRefreshAt: Date?
     @ObservationIgnored private var reach = ReachJudge()
     @ObservationIgnored private let reachLog = Logger(subsystem: "com.olshanskysoft.kuki", category: "reach")
@@ -85,6 +99,10 @@ final class Recorder {
     @ObservationIgnored private let clock: () -> Date
     @ObservationIgnored private var recordingActivity: NSObjectProtocol?
     @ObservationIgnored private var stationActivity: NSObjectProtocol?
+    @ObservationIgnored private var stationStartedAt: Date?
+    /// The last notification-permission request, so Settings can report its
+    /// answer (`notifications_toggled`).
+    @ObservationIgnored private(set) var notificationRequest: Task<Bool, Never>?
     /// iCloud history sync, when it's running. Tests leave it nil.
     @ObservationIgnored weak var syncHooks: RecorderSyncHooks?
     /// This device's sync id, stamped on every reading (nil in tests).
@@ -96,15 +114,21 @@ final class Recorder {
         static let sensor = "sensorID", place = "placeID", placeChangedAt = "placeChangedAt"
         static let seeded = "seededPlaces"
         static let menuBar = "menuBarMetrics", showMenuBar = "showInMenuBar", showInDock = "showInDock"
+        static let homeKitRequested = OnboardingKeys.homeKitRequested
     }
 
     /// - Parameters:
     ///   - defaults: where settings live. Tests pass `UserDefaults(suiteName:)`.
     ///   - clock: the current time. Tests pass a controllable one.
     init(defaults d: UserDefaults = .standard, clock: @escaping () -> Date = { .now }) {
+        // Before anything can seed places: an install with places predates
+        // the introduction and skips it.
+        OnboardingMigration.run(defaults: d)
         defaults = d
         self.clock = clock
+        reminders = AiringReminders(defaults: d)
         d.register(defaults: [
+            Keys.homeKitRequested: false,
             Keys.co2Limit: 1000.0, Keys.soundOn: true, Keys.notifyOn: false,
             Keys.interval: 1, Keys.settle: 10, Keys.demo: Self.isSimulator,
             Keys.menuBar: Metric.co2.rawValue, Keys.showMenuBar: true, Keys.showInDock: false,
@@ -123,8 +147,10 @@ final class Recorder {
         selectedSensorID = d.string(forKey: Keys.sensor).flatMap(UUID.init)
         currentPlaceID = d.string(forKey: Keys.place).flatMap(UUID.init)
         placeChangedAt = d.object(forKey: Keys.placeChangedAt) as? Date ?? .distantPast
+        homeKitRequested = d.bool(forKey: Keys.homeKitRequested)
         demo = DemoSensor(now: clock())
         homeKit.onChange = { [weak self] in self?.updateStaleness() }
+        reminders.placeName = { [weak self] in self?.currentPlace()?.name }
     }
 
     /// "co2,temperature" → [.co2, .temperature], in canonical order, unknown names dropped.
@@ -198,7 +224,7 @@ final class Recorder {
         configure(container: container)
         // HomeKit starts only when it's needed: a demo-only run (or a build
         // signed without the HomeKit entitlement) never touches Apple Home.
-        if !useDemo { homeKit.start() }
+        if !useDemo && homeKitRequested { homeKit.start() }
         #if DEBUG
         // `-seedDemoOnLaunch YES` fills three days of demo history (UI checks).
         if defaults.bool(forKey: "seedDemoOnLaunch") { seedDemoHistory() }
@@ -207,6 +233,7 @@ final class Recorder {
         #endif
         UNUserNotificationCenter.current().delegate = NotificationPresenter.shared
         if notifyOn { requestNotifications() }
+        reminders.reschedule()
         #if targetEnvironment(macCatalyst)
         // Without this, App Nap throttles the 15-second loop to minutes as
         // soon as the window is hidden — and the log gets holes.
@@ -223,7 +250,15 @@ final class Recorder {
         }
     }
 
-    private func tick() async {
+    /// Ask Apple Home (the onboarding primer's Continue, or the demo turned
+    /// off). Idempotent.
+    func connectHomeKit() {
+        homeKitRequested = true
+        if useDemo { useDemo = false } // the simulator defaults to the demo
+        homeKit.start()
+    }
+
+    func tick() async {
         let now = clock()
         if useDemo {
             demo.step(now: now)
@@ -236,12 +271,12 @@ final class Recorder {
             await homeKit.refresh()
         }
         updateStaleness()
-        checkAlert()
+        if !holdRecording { checkAlert() }
         #if targetEnvironment(macCatalyst)
         MenuBarBridge.shared.refresh() // picks up added / renamed places
         #endif
 
-        if RecordSchedule.isDue(lastRecordedAt: lastRecordedAt, intervalMinutes: intervalMinutes, now: clock()) {
+        if !holdRecording, RecordSchedule.isDue(lastRecordedAt: lastRecordedAt, intervalMinutes: intervalMinutes, now: clock()) {
             record(current, at: clock())
         }
     }
@@ -315,12 +350,18 @@ final class Recorder {
     @discardableResult
     func record(_ snapshot: SensorSnapshot?, at now: Date) -> Bool {
         guard let context, let values = snapshot?.recordable(now: now) else { return false }
-        let place = currentPlace()
+        // Never a reading without a place: if the store lost them (or the
+        // current one), seed / fall back to the first place first.
+        let place = currentPlace() ?? {
+            seedPlacesIfNeeded()
+            ensureCurrentPlace()
+            return currentPlace()
+        }()
         context.insert(Reading(
             timestamp: now,
             co2: values.co2, temperature: values.temperature,
             humidity: values.humidity, pm25: values.pm25,
-            placeID: place?.id, placeName: place?.name ?? "Unplaced",
+            placeID: place?.id, placeName: place?.name ?? ReadingPlaces.unplacedName,
             settling: isSettling, sensorName: sensorName, originDeviceID: originDeviceID
         ))
         try? context.save()
@@ -341,14 +382,33 @@ final class Recorder {
         return try? context.fetch(descriptor).first
     }
 
-    /// The sensor has been carried somewhere else.
-    func move(to place: Place) {
+    /// The sensor has been carried somewhere else. `via`: app / menu_bar,
+    /// for analytics.
+    func move(to place: Place, via: String = "app") {
         guard place.id != currentPlaceID else { return }
+        Analytics.track("place_moved", [
+            "to": OnboardingAnalytics.placeKey(place.name),
+            "via": via,
+            "from_kind": currentPlace().map { OnboardingAnalytics.placeKey($0.name) } ?? "none",
+        ])
         currentPlaceID = place.id
         placeChangedAt = clock()
-        alertGate.rearm()
+        updateAlertGate { $0.rearm() }
         lastRecordedAt = nil // log the new place right away
         syncHooks?.recorderDidMove(to: place.id, at: placeChangedAt)
+        reminders.reschedule()
+    }
+
+    /// The introduction's answer to "Where is the sensor?" — like a move, but
+    /// already settled: the sensor has presumably been sitting there.
+    func setStartingPlace(_ id: UUID) {
+        guard id != currentPlaceID else { return }
+        currentPlaceID = id
+        placeChangedAt = clock().addingTimeInterval(-Double(settleMinutes) * 60)
+        updateAlertGate { $0.rearm() }
+        lastRecordedAt = nil
+        syncHooks?.recorderDidMove(to: id, at: placeChangedAt)
+        reminders.reschedule()
     }
 
     func forgetPlace(_ place: Place) { forgetPlace(id: place.id) }
@@ -358,7 +418,10 @@ final class Recorder {
     }
 
     /// A place was added, renamed or re-ordered (Places sheet).
-    func placeEdited(_ place: Place) { syncHooks?.recorderDidEditPlace(place) }
+    func placeEdited(_ place: Place) {
+        syncHooks?.recorderDidEditPlace(place)
+        if place.id == currentPlaceID { reminders.reschedule() } // a renamed room
+    }
 
     /// A place is about to be deleted (Places sheet).
     func placeDeleted(_ place: Place) {
@@ -373,11 +436,22 @@ final class Recorder {
     func applyRemoteMove(to id: UUID, changedAt: Date) -> Bool {
         guard changedAt > placeChangedAt else { return false }
         let moved = id != currentPlaceID
+        if moved {
+            let from = currentPlace()
+            let target = FetchDescriptor<Place>(predicate: #Predicate { $0.id == id })
+            let to = try? context?.fetch(target).first
+            Analytics.track("place_moved", [
+                "to": OnboardingAnalytics.placeKey(to?.name),
+                "via": "sync",
+                "from_kind": from.map { OnboardingAnalytics.placeKey($0.name) } ?? "none",
+            ])
+        }
         currentPlaceID = id
         placeChangedAt = changedAt
         if moved {
-            alertGate.rearm()
+            updateAlertGate { $0.rearm() }
             lastRecordedAt = nil
+            reminders.reschedule()
         }
         return true
     }
@@ -428,6 +502,8 @@ final class Recorder {
         if demoOnly {
             try? context.delete(model: Reading.self, where: #Predicate { $0.sensorName == demoName })
         } else {
+            // Before they go: sync reads which hours to delete from iCloud.
+            syncHooks?.recorderWillDeleteAllReadings()
             try? context.delete(model: Reading.self)
         }
         try? context.save()
@@ -439,9 +515,32 @@ final class Recorder {
         let now = clock()
         // Only a value actually heard from the sensor may ring the bell.
         let co2 = current?.freshValue(.co2, now: now)
-        guard alertGate.evaluate(co2: co2, limit: co2Limit, settling: isSettling, now: now), let co2 else { return }
+        guard alertDue(co2: co2, now: now), let co2 else { return }
+        // Once per spell (the gate): a level bucket and the limit, never the value.
+        Analytics.track("co2_alert_fired", [
+            "level": AnalyticsValues.alertLevel(ppm: co2),
+            "via": "app",
+            "limit": Int(co2Limit.rounded()),
+        ])
         if soundOn { Chime.shared.ring() }
         if notifyOn { postNotification(co2: co2) }
+    }
+
+    /// Whether this fresh CO₂ value rings now. The gate is the one the
+    /// cloud-wake alert uses too (`AlertGate.load`), kept in the defaults:
+    /// a stuffy spell already announced by an iCloud wake-up — or before
+    /// a relaunch — isn't announced again.
+    func alertDue(co2: Double?, now: Date) -> Bool {
+        updateAlertGate { $0.evaluate(co2: co2, limit: co2Limit, settling: isSettling, now: now) }
+    }
+
+    /// Read, change and (only if it changed) write the shared gate.
+    private func updateAlertGate<T>(_ change: (inout AlertGate) -> T) -> T {
+        let before = AlertGate.load(from: defaults)
+        var gate = before
+        let result = change(&gate)
+        if gate != before { gate.save(to: defaults) }
+        return result
     }
 
     func previewAlert() {
@@ -449,12 +548,13 @@ final class Recorder {
     }
 
     private func requestNotifications() {
-        Task {
+        notificationRequest = Task {
             let center = UNUserNotificationCenter.current()
             let granted = (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false
             notificationsDenied = !granted
             // A switch that's on but can't do anything would be a lie.
             if !granted { notifyOn = false }
+            return granted
         }
     }
 
@@ -471,6 +571,16 @@ final class Recorder {
     }
 
     // MARK: Station mode
+
+    private func reportStationMode() {
+        if stationMode {
+            stationStartedAt = clock()
+            Analytics.track("station_mode_started")
+        } else if let started = stationStartedAt {
+            stationStartedAt = nil
+            Analytics.track("station_mode_ended", ["minutes": Int((clock().timeIntervalSince(started) / 60).rounded())])
+        }
+    }
 
     /// Keeps the system *and the display* awake while the station shows.
     nonisolated static let stationActivityOptions: ProcessInfo.ActivityOptions =
@@ -509,6 +619,25 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
     }
 }
 
+/// One alert gate for the whole app: the in-app chime (`Recorder`) and the
+/// iCloud wake-up alert (`CloudWake`) both read and write it, so one stuffy
+/// spell rings once. Both run in the app, so the app's own defaults reach
+/// both; it survives relaunches.
+extension AlertGate {
+    static let defaultsKey = "alertGate"
+    /// Where the cloud-wake alert kept its own gate before they were shared.
+    static let legacyCloudKey = "cloudAlertGate"
+
+    static func load(from defaults: UserDefaults) -> AlertGate {
+        let data = defaults.data(forKey: defaultsKey) ?? defaults.data(forKey: legacyCloudKey)
+        return data.flatMap { try? JSONDecoder().decode(AlertGate.self, from: $0) } ?? AlertGate()
+    }
+
+    func save(to defaults: UserDefaults) {
+        if let data = try? JSONEncoder().encode(self) { defaults.set(data, forKey: Self.defaultsKey) }
+    }
+}
+
 /// What the recorder tells iCloud history sync. Implemented by `HistorySync`.
 @MainActor
 protocol RecorderSyncHooks: AnyObject {
@@ -516,4 +645,8 @@ protocol RecorderSyncHooks: AnyObject {
     func recorderDidMove(to placeID: UUID, at time: Date)
     func recorderDidEditPlace(_ place: Place)
     func recorderDidDeletePlace(_ place: Place)
+    /// "Delete all recordings", called just before the readings go.
+    func recorderWillDeleteAllReadings()
 }
+
+extension Recorder: OnboardingSettingsSink {}

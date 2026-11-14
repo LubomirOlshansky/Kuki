@@ -49,7 +49,6 @@ final class KukiAppDelegate: NSObject, UIApplicationDelegate {
 @MainActor
 enum CloudWake {
     private static let log = Logger(subsystem: "com.olshanskysoft.kuki", category: "wake")
-    private static let gateKey = "cloudAlertGate"
 
     /// Returns true when a newer reading arrived.
     @discardableResult
@@ -61,26 +60,43 @@ enum CloudWake {
         try? cloud.save()
         WidgetCenter.shared.reloadTimelines(ofKind: WidgetSnapshot.widgetKind)
         #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
-        LiveAir.shared.update(with: cloud)
+        // Awaited: iOS may suspend the app as soon as the wake-up's
+        // completion handler is called.
+        await LiveAir.shared.updateAndWait(with: cloud)
         #endif
 
         // While the app is open it reads the sensor itself and alerts on its
         // own; the background path only speaks when the app can't.
-        if !appIsActive { alertIfNeeded(cloud, now: now) }
+        if !appIsActive { await alertIfNeeded(cloud, now: now) }
         return true
     }
 
-    /// Same rules as the in-app chime: once per stuffy spell, quiet until the
-    /// air recovers by 100 ppm, never twice within 20 minutes, and never on
-    /// a reading that is already old.
-    static func alertIfNeeded(_ s: WidgetSnapshot, now: Date, defaults: UserDefaults = .standard) {
-        guard defaults.bool(forKey: "notifyOn") else { return }
+    /// Same rules as the in-app chime — and the same gate (`AlertGate.load`),
+    /// so opening the app during a spell this already announced doesn't
+    /// announce it again: once per stuffy spell, quiet until the air recovers
+    /// by 100 ppm, never twice within 20 minutes, and never on a reading that
+    /// is already old. Returns the CO₂ to announce, if any.
+    static func alertDue(_ s: WidgetSnapshot, now: Date, defaults: UserDefaults = .standard) -> Double? {
+        guard defaults.bool(forKey: "notifyOn") else { return nil }
         let fresh = now.timeIntervalSince(s.measuredAt) < Freshness.maxAge
         let limit = defaults.object(forKey: "co2Limit") as? Double ?? s.limit
-        var gate = (defaults.data(forKey: gateKey)).flatMap { try? JSONDecoder().decode(AlertGate.self, from: $0) } ?? AlertGate()
+        let before = AlertGate.load(from: defaults)
+        var gate = before
         let ring = gate.evaluate(co2: fresh ? s.co2 : nil, limit: limit, settling: false, now: now)
-        if let data = try? JSONEncoder().encode(gate) { defaults.set(data, forKey: gateKey) }
-        guard ring, let co2 = s.co2 else { return }
+        if gate != before { gate.save(to: defaults) }
+        return ring ? s.co2 : nil
+    }
+
+    static func alertIfNeeded(_ s: WidgetSnapshot, now: Date, defaults: UserDefaults = .standard) async {
+        guard let co2 = alertDue(s, now: now, defaults: defaults) else { return }
+        // Through the same gate as the in-app chime: once per spell.
+        let limit = defaults.object(forKey: "co2Limit") as? Double ?? s.limit
+        Analytics.track("co2_alert_fired", [
+            "level": AnalyticsValues.alertLevel(ppm: co2),
+            "via": "cloud_wake",
+            "limit": Int(limit.rounded()),
+        ])
+        AmplitudeBackend.shared.flush() // the app may be suspended again any moment
 
         let content = UNMutableNotificationContent()
         let place = s.placeName.isEmpty ? "The room" : s.placeName
@@ -89,8 +105,12 @@ enum CloudWake {
         // The app isn't running to ring the bell: the banner carries it.
         content.sound = Furin.notificationSound(appRings: false)
         content.threadIdentifier = "co2"
-        UNUserNotificationCenter.current().add(
-            UNNotificationRequest(identifier: "co2-high-cloud", content: content, trigger: nil))
-        log.info("cloud alert posted at \(co2)")
+        do {
+            try await UNUserNotificationCenter.current().add(
+                UNNotificationRequest(identifier: "co2-high-cloud", content: content, trigger: nil))
+            log.info("cloud alert posted at \(co2)")
+        } catch {
+            log.error("cloud alert not posted: \(error.localizedDescription, privacy: .public)")
+        }
     }
 }

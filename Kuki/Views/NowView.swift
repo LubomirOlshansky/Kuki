@@ -2,6 +2,7 @@ import Accessibility
 import Charts
 import SwiftData
 import SwiftUI
+import UIKit
 
 /// 今 — the reading right now, and where the sensor is.
 ///
@@ -179,6 +180,9 @@ private struct HeroReading: View {
     @ScaledMetric(relativeTo: .largeTitle) private var numeralScaled: CGFloat = 76
     @Environment(\.legibilityWeight) private var legibilityWeight
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The introduction's airing-habit answer: a usually-tilted window gets
+    /// "open it wide" advice.
+    @AppStorage(OnboardingKeys.airingHabit) private var airingHabit: String?
     /// 0…1 — the new room's air "arriving" after the brush has painted.
     @State private var moteReveal = 1.0
     @State private var revealTask: Task<Void, Never>?
@@ -257,7 +261,7 @@ private struct HeroReading: View {
                                 .accessibilityHidden(true)
                             Text(level.title).font(Typeface.title).foregroundStyle(Ink.ink)
                         }
-                        Text(level.advice)
+                        Text(level.advice(habit: airingHabit))
                             .font(Typeface.body)
                             .foregroundStyle(Ink.inkSoft)
                     }
@@ -432,7 +436,7 @@ private struct NowFooter: View {
     }
 }
 
-/// A small matcha dot that breathes slowly while recording — the only sign
+/// A small ink dot that breathes slowly while recording — the only sign
 /// the app is working, and enough of one. Paused, it becomes a still, hollow
 /// ring: a different shape, not just a different colour. The breathing is a
 /// symbol effect, so it costs nothing per frame here and stops whenever the
@@ -448,7 +452,8 @@ struct RecordingDot: View {
             if active {
                 Image(systemName: "circle.fill")
                     .font(.system(size: 6))
-                    .foregroundStyle(Ink.matcha)
+                    // Ink, not matcha: the pigments mean the air's level only.
+                    .foregroundStyle(Ink.ink)
                     .symbolEffect(.breathe.pulse.wholeSymbol,
                                   isActive: scenePhase == .active && !reduceMotion && !motionPaused)
             } else {
@@ -591,6 +596,11 @@ private struct TraceChartDescriptor: AXChartDescriptorRepresentable {
 /// Shown until a sensor is found in Apple Home.
 struct EmptySensorView: View {
     @Environment(Recorder.self) private var recorder
+    @Environment(\.openURL) private var openURL
+    @State private var connecting = false
+
+    /// Skipped the introduction before connecting: Apple Home was never asked.
+    private var notConnected: Bool { !recorder.useDemo && !recorder.homeKitRequested }
 
     var body: some View {
         VStack(spacing: 18) {
@@ -605,18 +615,53 @@ struct EmptySensorView: View {
                 .font(Typeface.body)
                 .foregroundStyle(Ink.inkSoft)
                 .multilineTextAlignment(.center)
-            Button("Try the Demo Sensor") { recorder.useDemo = true }
-                .font(.subheadline)
-                .foregroundStyle(Ink.ai)
-                .buttonStyle(QuietButtonStyle())
-                .padding(.top, 6)
+            // The buttons' 44 pt frames already give more air than the old
+            // 6 pt top padding; stacked tight, they read as one group.
+            VStack(spacing: 0) {
+                if notConnected {
+                    textButton("Connect Apple Home") { connecting = true }
+                }
+                #if !targetEnvironment(macCatalyst)
+                if !notConnected, recorder.homeKit.status == .notAuthorized,
+                   let settings = URL(string: UIApplication.openSettingsURLString) {
+                    textButton("Open Settings") { openURL(settings) }
+                }
+                #endif
+                textButton("Try the demo") { recorder.useDemo = true }
+            }
         }
         .padding(.horizontal, 12)
         .frame(maxWidth: 420)
+        .sheet(isPresented: $connecting) {
+            AppleHomeConnectSheet().environment(recorder)
+        }
+    }
+
+    /// Where Home access is granted: System Settings on the Mac, the Settings
+    /// app (one tap away, below) on iPhone and iPad.
+    static var homeAccessMessage: String {
+        #if targetEnvironment(macCatalyst)
+        "Allow Kūki in System Settings › Privacy & Security › Home, then come back."
+        #else
+        "Allow Home access for Kūki in Settings, then come back."
+        #endif
+    }
+
+    /// A quiet indigo text button with a full 44 pt tap target.
+    private func textButton(_ title: LocalizedStringKey, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(Ink.ai)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(QuietButtonStyle())
     }
 
     private var title: String {
-        switch recorder.homeKit.status {
+        if notConnected { return "Kūki isn't connected to Apple Home yet" }
+        return switch recorder.homeKit.status {
         case .starting: "Looking for your sensor…"
         case .notAuthorized: "Kūki can't see Apple Home"
         case .noHomes: "No home in Apple Home"
@@ -626,11 +671,12 @@ struct EmptySensorView: View {
     }
 
     private var message: String {
-        switch recorder.homeKit.status {
+        if notConnected { return "Connect to read your air sensor." }
+        return switch recorder.homeKit.status {
         case .starting, .ready:
             "Values arrive from Apple Home in a few seconds."
         case .notAuthorized:
-            "Allow Kūki in System Settings › Privacy & Security › Home, then come back."
+            Self.homeAccessMessage
         case .noHomes, .noSensors:
             "Add your IKEA ALPSTUGA in the Home app first. Kūki will find it there."
         }
@@ -664,6 +710,8 @@ private struct LiveActivityButton: View {
                   systemImage: running ? "lock.slash" : "lock.rectangle.on.rectangle")
                 .font(.subheadline)
                 .foregroundStyle(Ink.ink)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(QuietButtonStyle())
         .onAppear { running = LiveAir.shared.isRunning }

@@ -26,6 +26,11 @@ struct SyncLedger: Codable, Equatable {
     var stateServerKnown = false
     /// `placeChangedAt` of the newest current-place the server is known to hold.
     var serverStateChangedAt: Date?
+    /// Hours of this device's history whose iCloud copy is queued for
+    /// deletion ("Delete all recordings"). The hour still filling up isn't
+    /// saved again until its delete has gone through — one request can't
+    /// save and delete the same record.
+    var pendingChunkDeletes: Set<Int> = []
 
     struct PlaceMeta: Codable, Equatable {
         var modifiedAt: Date
@@ -84,14 +89,19 @@ struct SyncLedger: Codable, Equatable {
         pendingRemoteState = try c.decodeIfPresent(RemoteSensorState.self, forKey: .pendingRemoteState)
         stateServerKnown = try c.decodeIfPresent(Bool.self, forKey: .stateServerKnown) ?? false
         serverStateChangedAt = try c.decodeIfPresent(Date.self, forKey: .serverStateChangedAt)
+        pendingChunkDeletes = try c.decodeIfPresent(Set<Int>.self, forKey: .pendingChunkDeletes) ?? []
     }
 
     /// Follow merges to the place an id lives on as.
-    func resolve(_ id: UUID) -> UUID {
+    func resolve(_ id: UUID) -> UUID { Self.follow(id, aliases: aliases) }
+
+    /// Follow a chain of merges (A → B → C) to its end. Cycle-safe: a loop
+    /// stops at the last id before it would repeat.
+    static func follow(_ id: UUID, aliases: [String: String]) -> UUID {
         var current = id.uuidString
-        var seen: Set<String> = []
+        var seen: Set<String> = [current]
         while let next = aliases[current], !seen.contains(next) {
-            seen.insert(current)
+            seen.insert(next)
             current = next
         }
         return UUID(uuidString: current) ?? id
@@ -107,6 +117,7 @@ struct SyncLedger: Codable, Equatable {
         stateServerKnown = false
         serverStateChangedAt = nil
         pendingRemoteState = nil
+        pendingChunkDeletes = [] // the zone (or the engine's queue) is gone with them
         for key in places.keys {
             places[key]?.serverKnown = false
             places[key]?.serverModifiedAt = nil
@@ -239,6 +250,12 @@ struct SyncFiles: Sendable {
         let id = UUID().uuidString
         try? Data(id.utf8).write(to: deviceIDURL, options: .atomic)
         return id
+    }
+
+    /// The device id if sync ever made one — read-only, never creates it.
+    func existingDeviceID() -> String? {
+        guard let raw = try? String(contentsOf: deviceIDURL, encoding: .utf8) else { return nil }
+        return UUID(uuidString: raw.trimmingCharacters(in: .whitespacesAndNewlines))?.uuidString
     }
 
     func loadLedger() -> SyncLedger {

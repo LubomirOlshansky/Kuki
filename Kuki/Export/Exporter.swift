@@ -41,6 +41,9 @@ struct Row: Sendable, Equatable {
     let pm25: Double?
     let settling: Bool
     let sensor: String
+    /// The device that recorded it (iCloud sync); nil = this device, before
+    /// sync stamped readings.
+    let origin: String?
 
     /// What groups readings into one place: its id, or — for readings whose
     /// place was never known — the stored name.
@@ -53,14 +56,22 @@ struct Row: Sendable, Equatable {
         co2 = r.co2; temperature = r.temperature; humidity = r.humidity; pm25 = r.pm25
         settling = r.settling
         sensor = r.sensorName
+        origin = r.originDeviceID
     }
 
     init(time: Date, place: String, placeID: UUID? = nil, co2: Double?, temperature: Double?,
-         humidity: Double?, pm25: Double?, settling: Bool, sensor: String = "") {
+         humidity: Double?, pm25: Double?, settling: Bool, sensor: String = "", origin: String? = nil) {
         self.time = time; self.place = place; self.placeID = placeID
         self.co2 = co2; self.temperature = temperature; self.humidity = humidity; self.pm25 = pm25
         self.settling = settling
         self.sensor = sensor
+        self.origin = origin
+    }
+
+    /// The same reading, shown under another place.
+    func filed(under placeID: UUID?, name: String) -> Row {
+        Row(time: time, place: name, placeID: placeID, co2: co2, temperature: temperature, humidity: humidity,
+            pm25: pm25, settling: settling, sensor: sensor, origin: origin)
     }
 
     func value(_ metric: Metric) -> Double? {
@@ -267,41 +278,61 @@ enum Exporter {
     }
 
     /// Readings since `start`, oldest first, for the sensors `filter` allows —
-    /// demo and real data never mix. Place names are resolved to the live
-    /// names, so a renamed place stays one place. Safe to call off the main actor.
-    static func fetchRows(container: ModelContainer, since start: Date, filter: SensorFilter) throws -> [Row] {
+    /// demo and real data never mix. Each reading is shown under the place it
+    /// belongs to *now* (`ReadingPlaces`): the live name, so a renamed place
+    /// stays one place; merged places as the survivor; a reading recorded
+    /// without a place under the place the sensor was known to be in. Safe
+    /// to call off the main actor.
+    ///
+    /// - Parameter book: what sync knows about places — the stored ledger
+    ///   unless a test passes its own.
+    static func fetchRows(container: ModelContainer, since start: Date, filter: SensorFilter,
+                          book: PlaceBook? = nil) throws -> [Row] {
         let context = ModelContext(container)
+        // A little before the period too: a placeless reading at its very
+        // start can still be placed by its neighbour.
+        let from = start.addingTimeInterval(-ReadingPlaces.nearby)
         let demoName = DemoSensor.name
         let predicate: Predicate<Reading>
         if filter == .demoOnly {
-            predicate = #Predicate<Reading> { $0.timestamp >= start && $0.sensorName == demoName }
+            predicate = #Predicate<Reading> { $0.timestamp >= from && $0.sensorName == demoName }
         } else {
-            predicate = #Predicate<Reading> { $0.timestamp >= start && $0.sensorName != demoName }
+            predicate = #Predicate<Reading> { $0.timestamp >= from && $0.sensorName != demoName }
         }
         let descriptor = FetchDescriptor<Reading>(predicate: predicate, sortBy: [SortDescriptor(\.timestamp)])
-        let places = try context.fetch(FetchDescriptor<Place>())
-        let names = Dictionary(places.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
-        return try context.fetch(descriptor).map { Row($0, liveNames: names) }
+        let rows = try context.fetch(descriptor).map { Row($0) }
+        let resolved = ReadingPlaces.resolve(rows, liveNames: try liveNames(context), book: book ?? .stored())
+        return resolved.filter { $0.time >= start }
     }
 
     /// How many readings — and from how many places — `fetchRows` would
-    /// return, without loading them: a count, and only the place columns.
-    static func counts(container: ModelContainer, since start: Date, filter: SensorFilter) throws -> (samples: Int, places: Int) {
+    /// return, without loading the values: a count, and only the columns
+    /// that decide the place.
+    static func counts(container: ModelContainer, since start: Date, filter: SensorFilter,
+                       book: PlaceBook? = nil) throws -> (samples: Int, places: Int) {
         let context = ModelContext(container)
+        let from = start.addingTimeInterval(-ReadingPlaces.nearby)
         let demoName = DemoSensor.name
         let predicate: Predicate<Reading>
         if filter == .demoOnly {
-            predicate = #Predicate<Reading> { $0.timestamp >= start && $0.sensorName == demoName }
+            predicate = #Predicate<Reading> { $0.timestamp >= from && $0.sensorName == demoName }
         } else {
-            predicate = #Predicate<Reading> { $0.timestamp >= start && $0.sensorName != demoName }
+            predicate = #Predicate<Reading> { $0.timestamp >= from && $0.sensorName != demoName }
         }
-        let samples = try context.fetchCount(FetchDescriptor<Reading>(predicate: predicate))
-        var places = FetchDescriptor<Reading>(predicate: predicate)
-        places.propertiesToFetch = [\.placeID, \.placeName]
-        let keys = Set(try context.fetch(places).map { r in
-            r.placeID.map { "id:\($0.uuidString)" } ?? "name:\(r.placeName)"
-        })
-        return (samples, keys.count)
+        var descriptor = FetchDescriptor<Reading>(predicate: predicate, sortBy: [SortDescriptor(\.timestamp)])
+        descriptor.propertiesToFetch = [\.timestamp, \.placeID, \.placeName, \.sensorName, \.originDeviceID]
+        let rows = try context.fetch(descriptor).map { r in
+            Row(time: r.timestamp, place: r.placeName, placeID: r.placeID, co2: nil, temperature: nil,
+                humidity: nil, pm25: nil, settling: false, sensor: r.sensorName, origin: r.originDeviceID)
+        }
+        let resolved = ReadingPlaces.resolve(rows, liveNames: try liveNames(context), book: book ?? .stored())
+            .filter { $0.time >= start }
+        return (resolved.count, Set(resolved.map(\.placeKey)).count)
+    }
+
+    private static func liveNames(_ context: ModelContext) throws -> [UUID: String] {
+        let places = try context.fetch(FetchDescriptor<Place>())
+        return Dictionary(places.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
     }
 
     static func fileName(_ ext: String) -> String {
@@ -320,6 +351,9 @@ struct ExportFile: Transferable {
     let sensor: String
     let filter: SensorFilter
     let container: ModelContainer
+    /// The period's name for `export_performed` (share sheets only; the Mac
+    /// save panel reports from its own completion). nil = not reported.
+    var reportRange: String? = nil
 
     static let markdownType = UTType("net.daringfireball.markdown") ?? .plainText
 
@@ -352,6 +386,10 @@ struct ExportFile: Transferable {
         }
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         try text.write(to: url, atomically: true, encoding: .utf8)
+        if let range = reportRange {
+            let kind = kind
+            Task { @MainActor in UsageAnalytics.shared.exportPerformed(format: kind, action: "share_file", range: range) }
+        }
         return SentTransferredFile(url)
     }
 }

@@ -92,16 +92,38 @@ struct AirWidgetView: View {
     }
 }
 
+/// The ink hierarchy for the current rendering mode. Full colour keeps
+/// Kūki's own inks, exactly as before. Tinted (accented) and clear/vibrant
+/// modes keep only each pixel's alpha and luminance, so the low-alpha inks
+/// (inkSoft 68 %, inkFaint 30 %) would wash into one faint tone: there the
+/// system's own primary/secondary styles carry the hierarchy instead.
+private struct WidgetInk {
+    let fullColor: Bool
+    init(_ mode: WidgetRenderingMode) { fullColor = mode == .fullColor }
+
+    var ink: Color { fullColor ? Ink.ink : .primary }
+    var soft: Color { fullColor ? Ink.inkSoft : .secondary }
+    var faint: Color { fullColor ? Ink.inkFaint : .secondary }
+    /// A level pigment. Outside full colour it's the accent (see
+    /// `.widgetAccentable()`) at full strength, so the system tint carries it.
+    func pigment(_ color: Color) -> Color { fullColor ? color : .primary }
+}
+
+/// Locale-aware "21.4" (or "21,4"): the decimal separator follows the reader's region. Shared with the Live Activity.
+func oneDecimal(_ v: Double) -> String {
+    v.formatted(.number.precision(.fractionLength(1)))
+}
+
 /// "12 min ago" — only shown when the reading isn't fresh enough to be
 /// trusted as "now".
 private struct AgeLabel: View {
     let s: WidgetSnapshot
+    @Environment(\.widgetRenderingMode) private var renderingMode
     var body: some View {
         (Text(s.measuredAt, style: .relative) + Text(" ago"))
             .font(.caption2)
-            .foregroundStyle(Ink.inkSoft)
+            .foregroundStyle(WidgetInk(renderingMode).soft)
             .lineLimit(1)
-            .minimumScaleFactor(0.8)
     }
 }
 
@@ -111,20 +133,28 @@ private struct EnsoReading: View {
     let stale: Bool
     var numberSize: CGFloat
     var lineWidth: CGFloat
+    @Environment(\.widgetRenderingMode) private var renderingMode
+    @Environment(\.legibilityWeight) private var legibilityWeight
 
     var body: some View {
         let level = CO2Level(ppm: co2)
+        let tone = WidgetInk(renderingMode)
         ZStack {
-            EnsoRing(fraction: EnsoRing.fraction(for: co2), color: stale ? Ink.inkFaint : level.color,
+            // The ensō is the accent: the tinted Home Screen paints it in the
+            // tint, everything else in the monochrome ink.
+            EnsoRing(fraction: EnsoRing.fraction(for: co2), color: stale ? tone.faint : tone.pigment(level.color),
                      lineWidth: lineWidth, animated: false)
+                .widgetAccentable()
             VStack(spacing: 0) {
                 Text(String(Int(co2.rounded())))
-                    .font(.system(size: numberSize, weight: .ultraLight).monospacedDigit())
-                    .foregroundStyle(stale ? Ink.inkSoft : Ink.ink)
+                    // Ultralight, one step heavier with Bold Text — as in the app.
+                    .font(Typeface.numeral(numberSize, bold: legibilityWeight == .bold))
+                    .foregroundStyle(stale ? tone.soft : tone.ink)
                     .minimumScaleFactor(0.6)
                     .lineLimit(1)
-                Text("ppm").font(.system(size: max(9, numberSize * 0.22))).tracking(1.2)
-                    .foregroundStyle(Ink.inkSoft)
+                // Never below 11 pt, the floor for any widget text.
+                Text("ppm").font(.system(size: max(11, numberSize * 0.22))).tracking(1.2)
+                    .foregroundStyle(tone.soft)
             }
             .padding(lineWidth * 2)
         }
@@ -135,8 +165,10 @@ private struct SmallAir: View {
     let s: WidgetSnapshot
     let co2: Double
     let stale: Bool
+    @Environment(\.widgetRenderingMode) private var renderingMode
 
     var body: some View {
+        let tone = WidgetInk(renderingMode)
         VStack(spacing: 6) {
             EnsoReading(co2: co2, stale: stale, numberSize: 34, lineWidth: 6)
             if stale {
@@ -144,9 +176,9 @@ private struct SmallAir: View {
             } else {
                 HStack(spacing: 4) {
                     if !s.placeKanji.isEmpty {
-                        Text(s.placeKanji).font(.custom("HiraMinProN-W3", size: 12)).foregroundStyle(Ink.inkSoft)
+                        Text(s.placeKanji).font(.custom("HiraMinProN-W3", size: 12)).foregroundStyle(tone.soft)
                     }
-                    Text(s.placeName).font(.caption2).foregroundStyle(Ink.inkSoft).lineLimit(1)
+                    Text(s.placeName).font(.caption2).foregroundStyle(tone.soft).lineLimit(1)
                 }
             }
         }
@@ -158,41 +190,54 @@ private struct MediumAir: View {
     let s: WidgetSnapshot
     let co2: Double
     let stale: Bool
+    @Environment(\.widgetRenderingMode) private var renderingMode
 
     var body: some View {
         let level = CO2Level(ppm: co2)
+        let tone = WidgetInk(renderingMode)
         HStack(spacing: 18) {
             EnsoReading(co2: co2, stale: stale, numberSize: 36, lineWidth: 6)
                 .frame(width: 118)
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 6) {
+                    // The level kanji wears the pigment, so it joins the ensō as accent.
                     Text(level.kanji).font(.custom("HiraMinProN-W3", size: 17))
-                        .foregroundStyle(stale ? Ink.inkSoft : level.color)
-                    Text(stale ? "Last reading" : level.title).font(.subheadline).foregroundStyle(Ink.ink)
+                        .foregroundStyle(stale ? tone.soft : tone.pigment(level.color))
+                        .widgetAccentable()
+                    Text(stale ? "Last reading" : level.title).font(.subheadline).foregroundStyle(tone.ink)
                     Spacer(minLength: 0)
                 }
                 Sparkline(values: s.recentCO2, limit: s.limit)
-                    .stroke(stale ? Ink.inkFaint : Ink.ink, style: StrokeStyle(lineWidth: 1.2, lineCap: .round, lineJoin: .round))
+                    .stroke(stale ? tone.faint : tone.ink, style: StrokeStyle(lineWidth: 1.2, lineCap: .round, lineJoin: .round))
                     .frame(height: 30)
                 HStack(spacing: 12) {
-                    small(s.temperature.map { String(format: "%.1f°", $0) }, "温")
-                    small(s.humidity.map { "\(Int($0.rounded()))%" }, "湿")
-                    small(s.pm25.map { "\(Int($0.rounded()))" }, "塵")
+                    small(s.temperature.map { oneDecimal($0) + "°" }, tone) {
+                        Image(systemName: "thermometer.medium")
+                    }
+                    small(s.humidity.map { $0.formatted(.number.precision(.fractionLength(0))) + "%" }, tone) {
+                        Image(systemName: "humidity")
+                    }
+                    small(s.pm25.map { $0.formatted(.number.precision(.fractionLength(0))) }, tone) {
+                        Text("PM2.5")
+                    }
                 }
+                .lineLimit(1)
                 if stale {
                     AgeLabel(s: s)
                 } else {
-                    Text(s.placeName).font(.caption2).foregroundStyle(Ink.inkSoft).lineLimit(1)
+                    Text(s.placeName).font(.caption2).foregroundStyle(tone.soft).lineLimit(1)
                 }
             }
         }
-        .widgetAccessibility(s: s, co2: co2, stale: stale)
+        .widgetAccessibility(s: s, co2: co2, stale: stale, withMetrics: true)
     }
 
-    private func small(_ value: String?, _ kanji: String) -> some View {
+    /// A value with a quiet label in front: an SF Symbol, or short text where
+    /// no symbol says it plainly. Both at caption2 (11 pt), never smaller.
+    private func small<L: View>(_ value: String?, _ tone: WidgetInk, @ViewBuilder label: () -> L) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 3) {
-            Text(kanji).font(.custom("HiraMinProN-W3", size: 10)).foregroundStyle(Ink.inkSoft)
-            Text(value ?? "—").font(.caption.monospacedDigit()).foregroundStyle(Ink.ink)
+            label().font(.caption2).foregroundStyle(tone.soft)
+            Text(value ?? "—").font(.caption.monospacedDigit()).foregroundStyle(tone.ink)
         }
     }
 }
@@ -264,17 +309,20 @@ private struct InlineAir: View {
 
 private struct EmptyAir: View {
     let family: WidgetFamily
+    @Environment(\.widgetRenderingMode) private var renderingMode
     var body: some View {
+        let tone = WidgetInk(renderingMode)
         switch family {
         case .accessoryCircular, .accessoryInline, .accessoryRectangular:
             Text("Open Kūki")
         default:
             VStack(spacing: 8) {
-                EnsoRing(fraction: 0.08, color: Ink.inkFaint, lineWidth: 5, animated: false)
+                EnsoRing(fraction: 0.08, color: tone.faint, lineWidth: 5, animated: false)
                     .frame(width: 54, height: 54)
+                    .widgetAccentable()
                 Text("Open Kūki to start reading the air.")
                     .font(.caption)
-                    .foregroundStyle(Ink.inkSoft)
+                    .foregroundStyle(tone.soft)
                     .multilineTextAlignment(.center)
             }
         }
@@ -282,11 +330,19 @@ private struct EmptyAir: View {
 }
 
 private extension View {
-    func widgetAccessibility(s: WidgetSnapshot, co2: Double, stale: Bool) -> some View {
+    func widgetAccessibility(s: WidgetSnapshot, co2: Double, stale: Bool, withMetrics: Bool = false) -> some View {
         let level = CO2Level(ppm: co2)
+        var label = "CO₂ \(Int(co2.rounded())) parts per million, \(level.title)"
+        if withMetrics {
+            // "Temperature 21.4 degrees, humidity 47 percent, PM2.5 6 micrograms per cubic metre"
+            if let t = s.temperature { label += ", temperature \(oneDecimal(t)) degrees" }
+            if let h = s.humidity { label += ", humidity \(Int(h.rounded())) percent" }
+            if let p = s.pm25 { label += ", PM2.5 \(Int(p.rounded())) micrograms per cubic metre" }
+        }
+        label += ", \(s.placeName)\(stale ? ", last reading, not live" : "")"
         return self
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("CO₂ \(Int(co2.rounded())) parts per million, \(level.title), \(s.placeName)\(stale ? ", last reading, not live" : "")")
+            .accessibilityLabel(label)
     }
 }
 

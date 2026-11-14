@@ -43,9 +43,13 @@ final class Reading {
     /// cell needs several minutes to reflect a new room, so stats skip these.
     var settling: Bool
     var sensorName: String
+    /// Which device recorded this reading (iCloud sync). nil = recorded here
+    /// before sync existed — treated as this device's own. Optional, so the
+    /// store migrates lightweight.
+    var originDeviceID: String?
 
     init(timestamp: Date, co2: Double?, temperature: Double?, humidity: Double?, pm25: Double?,
-         placeID: UUID?, placeName: String, settling: Bool, sensorName: String) {
+         placeID: UUID?, placeName: String, settling: Bool, sensorName: String, originDeviceID: String? = nil) {
         self.timestamp = timestamp
         self.co2 = co2
         self.temperature = temperature
@@ -55,6 +59,7 @@ final class Reading {
         self.placeName = placeName
         self.settling = settling
         self.sensorName = sensorName
+        self.originDeviceID = originDeviceID
     }
 }
 

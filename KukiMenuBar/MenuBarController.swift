@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 
 /// Must match `KukiStatusBar` in the app target (Kuki/Bridge/MenuBarBridge.swift)
 /// exactly — the Objective-C runtime pairs them by name.
@@ -14,6 +15,16 @@ import AppKit
     /// Station Mode on the Mac: take the main window into (or out of) the
     /// system's full screen.
     func setFullScreen(_ on: Bool)
+    /// false = menu-bar-only app (no Dock icon, macOS "accessory" policy).
+    func setDockIconVisible(_ visible: Bool)
+    /// Start Kūki when you log in (ServiceManagement). Returns the new state.
+    func setOpenAtLogin(_ on: Bool) -> Bool
+    func isOpenAtLogin() -> Bool
+    /// Make the window titled `title` invisible and inert (the recorder window).
+    func hideWindow(titled title: String)
+    /// Call `handler` whenever "is any titled window, other than those titled
+    /// `excludingTitles`, visible on screen" changes (and once right away).
+    func observeWindowVisibility(excludingTitles: [String], handler: @escaping (Bool) -> Void)
 }
 
 /// The AppKit half of Kūki. A Mac Catalyst app can't create a menu bar item
@@ -74,6 +85,84 @@ public final class MenuBarController: NSObject, KukiStatusBar, NSMenuDelegate {
     /// Whether *we* took the window full screen — so leaving Station Mode
     /// never pulls a window out of a full screen the person chose.
     private weak var stationWindow: NSWindow?
+
+    public func setOpenAtLogin(_ on: Bool) -> Bool {
+        do {
+            if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+        } catch {
+            NSLog("Kūki: open at login change failed: \(error.localizedDescription)")
+        }
+        return isOpenAtLogin()
+    }
+
+    public func isOpenAtLogin() -> Bool {
+        SMAppService.mainApp.status == .enabled
+    }
+
+    public func hideWindow(titled title: String) {
+        // The scene's NSWindow appears a moment after SwiftUI builds it.
+        for delay in [0.0, 0.15, 0.5, 1.2] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                for window in NSApp.windows where window.title == title {
+                    window.alphaValue = 0
+                    window.ignoresMouseEvents = true
+                    window.hasShadow = false
+                    window.isExcludedFromWindowsMenu = true
+                    window.collectionBehavior.insert([.transient, .ignoresCycle, .stationary])
+                    window.setFrameOrigin(NSPoint(x: 0, y: 0))
+                    window.orderBack(nil)
+                    // Give focus back to a visible window, if there is one.
+                    if window.isKeyWindow,
+                       let other = NSApp.windows.first(where: { $0 !== window && $0.isVisible && $0.alphaValue > 0 && $0.canBecomeKey }) {
+                        other.makeKeyAndOrderFront(nil)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: Window visibility
+
+    private var visibilityHandler: ((Bool) -> Void)?
+    private var visibilityExcluded: Set<String> = []
+    private var lastVisible: Bool?
+
+    public func observeWindowVisibility(excludingTitles: [String], handler: @escaping (Bool) -> Void) {
+        visibilityHandler = handler
+        visibilityExcluded = Set(excludingTitles)
+        let center = NotificationCenter.default
+        let names: [Notification.Name] = [
+            NSWindow.didChangeOcclusionStateNotification, NSWindow.didMiniaturizeNotification,
+            NSWindow.didDeminiaturizeNotification, NSWindow.willCloseNotification,
+            NSWindow.didBecomeKeyNotification, NSApplication.didHideNotification,
+            NSApplication.didUnhideNotification, NSApplication.didChangeOcclusionStateNotification,
+        ]
+        for name in names {
+            center.addObserver(self, selector: #selector(windowVisibilityMayHaveChanged), name: name, object: nil)
+        }
+        windowVisibilityMayHaveChanged()
+    }
+
+    /// A window counts when it is titled (not the status item, menus or the
+    /// invisible recorder window), on screen, not minimised, and at least
+    /// partly uncovered. Checked a beat later so closing windows are gone.
+    @objc private func windowVisibilityMayHaveChanged() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let visible = NSApp.windows.contains { w in
+                w.styleMask.contains(.titled) && !self.visibilityExcluded.contains(w.title)
+                    && w.isVisible && !w.isMiniaturized && w.alphaValue > 0.01
+                    && w.occlusionState.contains(.visible)
+            }
+            guard visible != self.lastVisible else { return }
+            self.lastVisible = visible
+            self.visibilityHandler?(visible)
+        }
+    }
+
+    public func setDockIconVisible(_ visible: Bool) {
+        NSApp.setActivationPolicy(visible ? .regular : .accessory)
+    }
 
     public func setFullScreen(_ on: Bool) {
         // Give the window a moment to come forward and the cover to present.

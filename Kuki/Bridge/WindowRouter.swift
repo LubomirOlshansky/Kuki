@@ -6,6 +6,11 @@ import UIKit
 enum WindowID {
     static let main = "main"
     static let settings = "settings"
+    static let settingsTitle = "Kūki Settings"
+    /// Mac: an invisible window that keeps a menu-bar-only Kūki "active" for
+    /// Apple Home after the main window is closed.
+    static let recorder = "recorder"
+    static let recorderTitle = "Kūki Recorder"
 }
 
 /// Brings a window forward — or opens it again when it was closed. Shared by

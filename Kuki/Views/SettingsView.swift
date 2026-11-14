@@ -2,6 +2,9 @@ import SwiftUI
 
 /// 設定 — the few things worth choosing.
 struct SettingsView: View {
+    #if targetEnvironment(macCatalyst)
+    @State private var openAtLogin = MenuBarBridge.shared.openAtLogin
+    #endif
     @State private var cloudSyncOn = CloudSync.userWantsSync
     @Environment(Recorder.self) private var recorder
     @State private var confirmDelete = false
@@ -52,7 +55,13 @@ struct SettingsView: View {
 
                 #if targetEnvironment(macCatalyst)
                 Section {
+                    Toggle("Show in Dock", isOn: $r.showInDock)
+                    Toggle("Open at Login", isOn: Binding(
+                        get: { openAtLogin },
+                        set: { openAtLogin = MenuBarBridge.shared.setOpenAtLogin($0) }
+                    ))
                     Toggle("Show in Menu Bar", isOn: $r.showInMenuBar)
+                        .disabled(!recorder.showInDock) // without a Dock icon, the menu bar item is the way in
                     if recorder.showInMenuBar {
                         ForEach(Metric.allCases) { metric in
                             Toggle(isOn: Binding(
@@ -67,7 +76,9 @@ struct SettingsView: View {
                 } header: {
                     Text("Menu Bar")
                 } footer: {
-                    Text("Choose what sits next to the clock. A small mark appears only when the air needs opening up: ◐ getting stale, ● stuffy.")
+                    Text(recorder.showInDock
+                         ? "With a Dock icon, Kūki is a normal app — and Apple Home only updates it while it's in front, so recording pauses in the background."
+                         : "Kūki runs from the menu bar, so it keeps recording around the clock — even with its window closed. A small mark appears only when the air needs opening up: ◐ getting stale, ● stuffy.")
                 }
                 #endif
 
@@ -109,12 +120,16 @@ struct SettingsView: View {
                                 cloudSyncOn = on
                                 CloudSync.userWantsSync = on
                                 if on { Task { await CloudSync.ensureSubscription() } }
+                                HistorySync.shared.refresh()
                             }
                         ))
                     } header: {
                         Text("iCloud")
                     } footer: {
-                        Text("Shares only the latest reading, through your private iCloud, so your iPhone's widget, Lock Screen and alerts can follow a Mac that records around the clock. Your history stays on each device.")
+                        VStack(alignment: .leading, spacing: 8) {
+                            SyncStatusLine(status: HistorySync.shared.status)
+                            Text("Syncs the history each device records, your places and which room the sensor is in between your devices, through your private iCloud. The latest reading also reaches your iPhone's widget, Lock Screen and alerts, so they can follow a Mac that records around the clock.")
+                        }
                     }
                 }
 
@@ -137,6 +152,31 @@ struct SettingsView: View {
             } message: {
                 Text("Places are kept. This can't be undone — export first if you want a copy.")
             }
+        }
+    }
+}
+
+/// "Synced 2 min ago" / "Waiting for iCloud" / "Off" — kept current by the
+/// minute.
+private struct SyncStatusLine: View {
+    let status: HistorySync.Status
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            Text(text(now: context.date))
+                .foregroundStyle(Ink.ink)
+        }
+    }
+
+    private func text(now: Date) -> String {
+        switch status {
+        case .off: "Off"
+        case .waiting: "Waiting for iCloud"
+        case let .problem(message): message
+        case let .synced(date):
+            now.timeIntervalSince(date) < 60
+                ? "Synced just now"
+                : "Synced \(date.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))"
         }
     }
 }

@@ -25,8 +25,22 @@ final class KukiAppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didReceiveRemoteNotification userInfo: [AnyHashable: Any],
                      fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        // History sync (the KukiHistory zone, via CKSyncEngine's database
+        // subscription) and the latest-reading mailbox (LatestAir query
+        // subscription) share the one push channel.
+        let isHistory = HistorySync.isHistoryNotification(userInfo)
+        let appIsActive = application.applicationState == .active
         Task { @MainActor in
-            let changed = await CloudWake.handle(appIsActive: application.applicationState == .active)
+            let changed: Bool
+            if isHistory {
+                changed = await HistorySync.shared.fetchNow()
+            } else {
+                #if targetEnvironment(macCatalyst)
+                changed = false // the Mac publishes the latest reading; it never follows it
+                #else
+                changed = await CloudWake.handle(appIsActive: appIsActive)
+                #endif
+            }
             completionHandler(changed ? .newData : .noData)
         }
     }

@@ -298,6 +298,23 @@ struct EnsoKasure: Shape {
     }
 }
 
+// MARK: - Motion pause
+
+/// True while the window showing a view can't be seen — hidden, minimised or
+/// covered. On the Mac a menu-bar app stays `.active` (scenePhase) even then,
+/// so the app sets this from the window's occlusion and every continuous
+/// animation stops drawing. Defaults to false (widgets, previews).
+private struct MotionPausedKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var motionPaused: Bool {
+        get { self[MotionPausedKey.self] }
+        set { self[MotionPausedKey.self] = newValue }
+    }
+}
+
 // MARK: - Air motes
 
 /// The air itself, made visible: faint motes drifting up inside the ensō like
@@ -306,7 +323,7 @@ struct EnsoKasure: Shape {
 /// out of the reading in the middle, so they never sit on the numbers.
 /// Deterministic per index, so nothing jumps when the count changes; motes
 /// simply fade in or out. Drawn at 15 fps and paused whenever the scene isn't
-/// active.
+/// active or its window can't be seen (`motionPaused`).
 struct AirMotes: View {
     var ppm: Double
     var color: Color
@@ -318,6 +335,7 @@ struct AirMotes: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.motionPaused) private var motionPaused
 
     nonisolated static let maxCount = 90
     /// Below this the air is clear, and the field is empty.
@@ -353,7 +371,7 @@ struct AirMotes: View {
         let base = Double(Self.count(for: ppm))
         let shown = base * min(1, max(0, reveal))
         MoteField(count: shown, color: color, zone: exclusion,
-                  still: reduceMotion, paused: reduceMotion || scenePhase != .active)
+                  still: reduceMotion, paused: reduceMotion || scenePhase != .active || motionPaused)
             .animation(.easeInOut(duration: 2), value: base)
             .animation(reveal == 0 ? nil : .easeInOut(duration: 2), value: reveal)
             .allowsHitTesting(false)

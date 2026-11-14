@@ -41,6 +41,16 @@ final class Recorder {
         didSet { defaults.set(menuBarMetrics.map(\.rawValue).joined(separator: ","), forKey: Keys.menuBar) }
     }
     var showInMenuBar: Bool { didSet { defaults.set(showInMenuBar, forKey: Keys.showMenuBar) } }
+    /// Mac: false (default) = a menu bar app with no Dock icon. Apple Home
+    /// keeps answering a menu-bar-only app even when its window is closed or
+    /// behind other apps, so Kūki records around the clock. With a Dock icon
+    /// it's a normal app, and Apple Home pauses it whenever it isn't in front.
+    var showInDock: Bool {
+        didSet {
+            defaults.set(showInDock, forKey: Keys.showInDock)
+            if !showInDock { showInMenuBar = true } // otherwise there'd be no way back in
+        }
+    }
     var selectedSensorID: UUID? {
         didSet { defaults.set(selectedSensorID?.uuidString, forKey: Keys.sensor); updateStaleness() }
     }
@@ -75,13 +85,17 @@ final class Recorder {
     @ObservationIgnored private let clock: () -> Date
     @ObservationIgnored private var recordingActivity: NSObjectProtocol?
     @ObservationIgnored private var stationActivity: NSObjectProtocol?
+    /// iCloud history sync, when it's running. Tests leave it nil.
+    @ObservationIgnored weak var syncHooks: RecorderSyncHooks?
+    /// This device's sync id, stamped on every reading (nil in tests).
+    @ObservationIgnored var originDeviceID: String?
 
     private enum Keys {
         static let co2Limit = "co2Limit", soundOn = "soundOn", notifyOn = "notifyOn"
         static let interval = "intervalMinutes", settle = "settleMinutes", demo = "useDemo"
         static let sensor = "sensorID", place = "placeID", placeChangedAt = "placeChangedAt"
         static let seeded = "seededPlaces"
-        static let menuBar = "menuBarMetrics", showMenuBar = "showInMenuBar"
+        static let menuBar = "menuBarMetrics", showMenuBar = "showInMenuBar", showInDock = "showInDock"
     }
 
     /// - Parameters:
@@ -93,7 +107,7 @@ final class Recorder {
         d.register(defaults: [
             Keys.co2Limit: 1000.0, Keys.soundOn: true, Keys.notifyOn: false,
             Keys.interval: 1, Keys.settle: 10, Keys.demo: Self.isSimulator,
-            Keys.menuBar: Metric.co2.rawValue, Keys.showMenuBar: true,
+            Keys.menuBar: Metric.co2.rawValue, Keys.showMenuBar: true, Keys.showInDock: false,
         ])
         co2Limit = d.double(forKey: Keys.co2Limit)
         soundOn = d.bool(forKey: Keys.soundOn)
@@ -102,7 +116,10 @@ final class Recorder {
         settleMinutes = d.integer(forKey: Keys.settle)
         useDemo = d.bool(forKey: Keys.demo)
         menuBarMetrics = Self.parseMetrics(d.string(forKey: Keys.menuBar))
-        showInMenuBar = d.bool(forKey: Keys.showMenuBar)
+        let dock = d.bool(forKey: Keys.showInDock)
+        showInDock = dock
+        // Without a Dock icon the menu bar item is the only way in.
+        showInMenuBar = dock ? d.bool(forKey: Keys.showMenuBar) : true
         selectedSensorID = d.string(forKey: Keys.sensor).flatMap(UUID.init)
         currentPlaceID = d.string(forKey: Keys.place).flatMap(UUID.init)
         placeChangedAt = d.object(forKey: Keys.placeChangedAt) as? Date ?? .distantPast
@@ -215,6 +232,7 @@ final class Recorder {
             // read is what keeps the values counted as fresh.
             lastRefreshAt = now
             DebugLog.write("tick", "refresh (app \(Self.appStateName))")
+            reachLog.notice("tick: refresh (app \(Self.appStateName, privacy: .public))")
             await homeKit.refresh()
         }
         updateStaleness()
@@ -303,10 +321,11 @@ final class Recorder {
             co2: values.co2, temperature: values.temperature,
             humidity: values.humidity, pm25: values.pm25,
             placeID: place?.id, placeName: place?.name ?? "Unplaced",
-            settling: isSettling, sensorName: sensorName
+            settling: isSettling, sensorName: sensorName, originDeviceID: originDeviceID
         ))
         try? context.save()
         lastRecordedAt = now
+        syncHooks?.recorderDidRecord(at: now, sensorName: sensorName)
         WidgetFeed.shared.publish(
             co2: values.co2, temperature: values.temperature, humidity: values.humidity, pm25: values.pm25,
             measuredAt: snapshot?.lastHeard ?? now, place: place, limit: co2Limit,
@@ -329,11 +348,48 @@ final class Recorder {
         placeChangedAt = clock()
         alertGate.rearm()
         lastRecordedAt = nil // log the new place right away
+        syncHooks?.recorderDidMove(to: place.id, at: placeChangedAt)
     }
 
-    func forgetPlace(_ place: Place) {
-        if currentPlaceID == place.id { currentPlaceID = nil }
+    func forgetPlace(_ place: Place) { forgetPlace(id: place.id) }
+
+    func forgetPlace(id: UUID) {
+        if currentPlaceID == id { currentPlaceID = nil }
     }
+
+    /// A place was added, renamed or re-ordered (Places sheet).
+    func placeEdited(_ place: Place) { syncHooks?.recorderDidEditPlace(place) }
+
+    /// A place is about to be deleted (Places sheet).
+    func placeDeleted(_ place: Place) {
+        forgetPlace(place)
+        syncHooks?.recorderDidDeletePlace(place)
+    }
+
+    /// Another device moved the sensor, later than the last move here: follow
+    /// it, with settling counted from *its* moment. Not sent back. Returns
+    /// whether anything changed.
+    @discardableResult
+    func applyRemoteMove(to id: UUID, changedAt: Date) -> Bool {
+        guard changedAt > placeChangedAt else { return false }
+        let moved = id != currentPlaceID
+        currentPlaceID = id
+        placeChangedAt = changedAt
+        if moved {
+            alertGate.rearm()
+            lastRecordedAt = nil
+        }
+        return true
+    }
+
+    /// Two places turned out to be one (sync merge): follow the survivor
+    /// without counting it as a move.
+    func replacePlace(_ old: UUID, with new: UUID) {
+        if currentPlaceID == old { currentPlaceID = new }
+    }
+
+    /// Places changed outside the Places sheet (sync).
+    func placesDidChange() { ensureCurrentPlace() }
 
     private func seedPlacesIfNeeded() {
         // Seed whenever the store has no places at all — a fresh install, or
@@ -451,4 +507,13 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         Furin.presentationOptions(appRings: UserDefaults.standard.bool(forKey: "soundOn"))
     }
+}
+
+/// What the recorder tells iCloud history sync. Implemented by `HistorySync`.
+@MainActor
+protocol RecorderSyncHooks: AnyObject {
+    func recorderDidRecord(at time: Date, sensorName: String)
+    func recorderDidMove(to placeID: UUID, at time: Date)
+    func recorderDidEditPlace(_ place: Place)
+    func recorderDidDeletePlace(_ place: Place)
 }

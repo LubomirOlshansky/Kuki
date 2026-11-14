@@ -1,5 +1,6 @@
 #if targetEnvironment(macCatalyst)
 import Foundation
+import os
 import Observation
 import SwiftData
 import UIKit
@@ -17,6 +18,16 @@ import UIKit
     /// Station Mode on the Mac: take the main window into (or out of) the
     /// system's full screen.
     func setFullScreen(_ on: Bool)
+    /// false = menu-bar-only app (no Dock icon, macOS "accessory" policy).
+    func setDockIconVisible(_ visible: Bool)
+    /// Start Kūki when you log in (ServiceManagement). Returns the new state.
+    func setOpenAtLogin(_ on: Bool) -> Bool
+    func isOpenAtLogin() -> Bool
+    /// Make the window titled `title` invisible and inert (the recorder window).
+    func hideWindow(titled title: String)
+    /// Call `handler` whenever "is any titled window, other than those titled
+    /// `excludingTitles`, visible on screen" changes (and once right away).
+    func observeWindowVisibility(excludingTitles: [String], handler: @escaping (Bool) -> Void)
 }
 
 /// Loads the AppKit menu bar bundle and keeps it in step with the recorder.
@@ -45,6 +56,27 @@ final class MenuBarBridge {
         }
         self.bar = bar
         observe()
+        applyDockPolicy()
+        // A menu-bar app stays "active" with its window hidden or covered;
+        // stop the main window's animations while nobody can see them.
+        bar.observeWindowVisibility(excludingTitles: [WindowID.recorderTitle, WindowID.settingsTitle]) { visible in
+            Task { @MainActor in WindowVisibility.shared.mainWindowVisible = visible }
+        }
+        #if DEBUG
+        // `-closeWindowAfter N` closes every window after N seconds, leaving
+        // only the menu bar item (background-recording checks).
+        let closeAfter = UserDefaults.standard.integer(forKey: "closeWindowAfter")
+        if closeAfter > 0 {
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(closeAfter))
+                Logger(subsystem: "com.olshanskysoft.kuki", category: "experiment").notice("closing all windows now")
+                for session in UIApplication.shared.openSessions
+                where (session.scene as? UIWindowScene)?.title != WindowID.recorderTitle {
+                    UIApplication.shared.requestSceneSessionDestruction(session, options: nil)
+                }
+            }
+        }
+        #endif
     }
 
     /// Re-render whenever anything the menu shows changes.
@@ -106,6 +138,7 @@ final class MenuBarBridge {
         let places = (try? container?.mainContext.fetch(FetchDescriptor<Place>(sortBy: [SortDescriptor(\.sortIndex)]))) ?? []
         let current = places.first { $0.id == recorder.currentPlaceID }
         bar.setVisible(recorder.showInMenuBar)
+        applyDockPolicy()
         bar.update(
             symbols: shown.map(\.symbol),
             values: shown.map { m in shownSnapshot.map { m.compact(m.value(of: $0)) } ?? "—" },
@@ -123,6 +156,42 @@ final class MenuBarBridge {
     }
 
     /// Station Mode enters and leaves the system's full screen with it.
+    private var appliedDock: Bool?
+
+    /// Menu-bar-only (no Dock icon) unless the user asked for the Dock.
+    private func applyDockPolicy() {
+        guard let bar, let recorder, appliedDock != recorder.showInDock else { return }
+        appliedDock = recorder.showInDock
+        bar.setDockIconVisible(recorder.showInDock)
+        ensureRecorderWindow()
+        Logger(subsystem: "com.olshanskysoft.kuki", category: "reach")
+            .notice("Dock icon \(recorder.showInDock ? "shown" : "hidden (menu bar app)", privacy: .public)")
+    }
+
+    /// Menu-bar mode needs a window to stay "active" for Apple Home: open the
+    /// invisible recorder window if it isn't there (and close it when the
+    /// user asks for a Dock icon).
+    func ensureRecorderWindow() {
+        guard let recorder else { return }
+        let session = UIApplication.shared.openSessions.first {
+            ($0.scene as? UIWindowScene)?.title == WindowID.recorderTitle
+        }
+        if recorder.showInDock {
+            if let session { UIApplication.shared.requestSceneSessionDestruction(session, options: nil) }
+        } else if session == nil, let open = WindowRouter.shared.openWindow {
+            open(id: WindowID.recorder)
+        }
+    }
+
+    func hideRecorderWindow() {
+        bar?.hideWindow(titled: WindowID.recorderTitle)
+    }
+
+    var openAtLogin: Bool { bar?.isOpenAtLogin() ?? false }
+
+    @discardableResult
+    func setOpenAtLogin(_ on: Bool) -> Bool { bar?.setOpenAtLogin(on) ?? false }
+
     func setFullScreen(_ on: Bool) {
         bar?.setFullScreen(on)
     }

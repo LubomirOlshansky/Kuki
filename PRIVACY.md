@@ -21,7 +21,12 @@ Kūki asks for permission to access your Home data so it can read your air senso
 
 ## iCloud (optional)
 
-If iCloud Sync is on (Settings › iCloud Sync), Kūki keeps **one** record — the latest reading and the place name — in **your private iCloud database**, so your other devices' widgets, Lock Screen and alerts can show it. This data is stored by Apple under your Apple Account; the developer cannot access it. Turn iCloud Sync off at any time to stop it.
+If iCloud Sync is on (Settings › iCloud Sync), Kūki keeps in **your private iCloud database**:
+
+- the latest reading and its place name, so your other devices' widgets, Lock Screen and alerts can show it;
+- the history each of your devices records (readings grouped by hour), your list of places, and which place the sensor is in, so all your devices show the same history.
+
+This data is stored by Apple under your Apple Account; the developer cannot access it. Turn iCloud Sync off at any time to stop it; what is already in iCloud stays there until you remove it (Settings › Apple Account › iCloud › Manage Storage).
 
 ## Notifications
 

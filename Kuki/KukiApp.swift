@@ -17,11 +17,15 @@ struct KukiApp: App {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             // cloudKitDatabase: .none — the history stays on this device. With
             // the iCloud entitlement present, SwiftData would otherwise try to
-            // mirror the whole store to CloudKit (and refuse our schema). Only
-            // the latest reading syncs, via CloudSync.
+            // mirror the whole store to CloudKit (and refuse our schema) — a
+            // record per reading. The latest reading syncs via CloudSync, and
+            // history in hour chunks via HistorySync (CKSyncEngine).
             let config = ModelConfiguration("Kuki", url: folder.appending(path: "Kuki.store"),
                                             cloudKitDatabase: .none)
-            container = try ModelContainer(for: Place.self, Reading.self, configurations: config)
+            let store = try ModelContainer(for: Place.self, Reading.self, configurations: config)
+            container = store
+            // Before any window: a silent push may have launched the app.
+            HistorySync.shared.configure(container: store)
         } catch {
             fatalError("Could not open the Kūki store: \(error)")
         }
@@ -34,6 +38,7 @@ struct KukiApp: App {
                 .environment(nav)
                 .task {
                     recorder.start(container: container)
+                    HistorySync.shared.attach(recorder)
                     #if targetEnvironment(macCatalyst)
                     MenuBarBridge.shared.start(recorder: recorder, container: container)
                     #endif
@@ -51,6 +56,23 @@ struct KukiApp: App {
                 .environment(nav)
         }
         .modelContainer(container)
+
+        // Apple Home talks to a menu-bar-only Mac app only while it has a
+        // window. This one is invisible (zero alpha, no clicks, not in the
+        // Window menu or ⌘-Tab), so Kūki keeps recording after you close the
+        // main window.
+        WindowGroup(WindowID.recorderTitle, id: WindowID.recorder) {
+            Color.clear
+                .frame(width: 1, height: 1)
+                .background(SceneReader { scene in
+                    WindowRouter.shared.register(scene, as: WindowID.recorder)
+                    scene.title = WindowID.recorderTitle
+                    scene.sizeRestrictions?.minimumSize = CGSize(width: 1, height: 1)
+                    scene.sizeRestrictions?.maximumSize = CGSize(width: 1, height: 1)
+                    scene.titlebar?.titleVisibility = .hidden
+                    MenuBarBridge.shared.hideRecorderWindow()
+                })
+        }
         #endif
     }
 }
@@ -93,6 +115,7 @@ struct RootView: View {
         // Three or four destinations don't need a sidebar (or its toggle).
         .tabViewStyle(.tabBarOnly)
         .tint(Ink.ink)
+        .environment(\.motionPaused, !WindowVisibility.shared.mainWindowVisible)
         // Hand the environment over explicitly: on Mac Catalyst a full-screen
         // cover is hosted outside this view tree and doesn't inherit it.
         #if targetEnvironment(macCatalyst)
@@ -141,7 +164,12 @@ struct RootView: View {
             scene.sizeRestrictions?.minimumSize = CGSize(width: 560, height: 620)
             #endif
         })
-        .onAppear { WindowRouter.shared.openWindow = openWindow }
+        .onAppear {
+            WindowRouter.shared.openWindow = openWindow
+            #if targetEnvironment(macCatalyst)
+            MenuBarBridge.shared.ensureRecorderWindow()
+            #endif
+        }
         .onChange(of: scenePhase) { _, phase in
             DebugLog.write("scene", "phase → \(phase)")
             if phase == .active { recorder.appBecameActive() }
@@ -165,7 +193,7 @@ private struct SettingsWindow: View {
         SettingsView()
             .background(SceneReader { scene in
                 WindowRouter.shared.register(scene, as: WindowID.settings)
-                scene.title = "Kūki Settings"
+                scene.title = WindowID.settingsTitle
                 scene.sizeRestrictions?.minimumSize = Self.size
                 scene.sizeRestrictions?.maximumSize = Self.size
                 scene.sizeRestrictions?.allowsFullScreen = false

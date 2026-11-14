@@ -185,6 +185,14 @@ private struct HeroReading: View {
     /// The numeral never outgrows the ring it sits in.
     private var numeralSize: CGFloat { min(max(numeralScaled, ensoSize * 0.30), ensoSize * 0.34) }
 
+    private static var pausedAdvice: String {
+        #if targetEnvironment(macCatalyst)
+        "Apple Home only updates Kūki in the background when it runs from the menu bar. Turn off Settings › Show in Dock to record around the clock."
+        #else
+        "Apple Home only updates the app in front. Station Mode keeps Kūki in front and recording."
+        #endif
+    }
+
     private var lastHeardText: String {
         if pausedInBackground {
             guard let lastHeard else { return "Paused" }
@@ -235,7 +243,7 @@ private struct HeroReading: View {
                     VStack(spacing: 8) {
                         Text(lastHeardText).font(Typeface.title).foregroundStyle(Ink.ink)
                         Text(pausedInBackground
-                             ? "Apple Home only updates the app in front. Station Mode keeps Kūki in front and recording."
+                             ? Self.pausedAdvice
                              : "Recording pauses until Apple Home hears from it again.")
                             .font(Typeface.body)
                             .foregroundStyle(Ink.inkSoft)
@@ -427,11 +435,12 @@ private struct NowFooter: View {
 /// the app is working, and enough of one. Paused, it becomes a still, hollow
 /// ring: a different shape, not just a different colour. The breathing is a
 /// symbol effect, so it costs nothing per frame here and stops whenever the
-/// window isn't in front.
+/// window isn't in front or can't be seen (`motionPaused`).
 struct RecordingDot: View {
     var active = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.motionPaused) private var motionPaused
 
     var body: some View {
         Group {
@@ -439,7 +448,8 @@ struct RecordingDot: View {
                 Image(systemName: "circle.fill")
                     .font(.system(size: 6))
                     .foregroundStyle(Ink.matcha)
-                    .symbolEffect(.breathe.pulse.wholeSymbol, isActive: scenePhase == .active && !reduceMotion)
+                    .symbolEffect(.breathe.pulse.wholeSymbol,
+                                  isActive: scenePhase == .active && !reduceMotion && !motionPaused)
             } else {
                 Circle()
                     .strokeBorder(Ink.inkSoft, lineWidth: 1)

@@ -77,7 +77,11 @@ struct PlaceSheet: View {
                 TextField("Name", text: $renameText)
                 Button("Save") {
                     let name = renameText.trimmingCharacters(in: .whitespaces)
-                    if !name.isEmpty { place.name = name; try? context.save() }
+                    if !name.isEmpty, name != place.name {
+                        place.name = name
+                        try? context.save()
+                        recorder.placeEdited(place)
+                    }
                     renaming = nil
                 }
                 Button("Cancel", role: .cancel) { renaming = nil }
@@ -99,6 +103,7 @@ struct PlaceSheet: View {
         let place = Place(name: name, sortIndex: (places.map(\.sortIndex).max() ?? 0) + 1)
         context.insert(place)
         try? context.save()
+        recorder.placeEdited(place)
         newName = ""
         recorder.move(to: place)
         dismiss()
@@ -106,7 +111,7 @@ struct PlaceSheet: View {
 
     private func delete(_ place: Place) {
         // Readings keep their place name, so history stays intact.
-        recorder.forgetPlace(place)
+        recorder.placeDeleted(place)
         context.delete(place)
         try? context.save()
     }

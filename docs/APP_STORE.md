@@ -14,17 +14,24 @@ Work through the steps in order. Rough time: an afternoon, plus Apple's review (
 
 ## 1. Before anything: decide what Kūki promises
 
-Apple Home only gives sensor values to the app **in front**, on iPhone and on Mac alike. The listing and screenshots must not promise background recording. Use wording like:
+Apple Home only gives sensor values to an app that's active. On the **Mac**, Kūki stays active as a menu bar app (with an invisible keep-alive window), so it records 24/7. On **iPhone/iPad** it records only while open. Word it like this:
 
-> Records while Kūki is open. Leave it in **Station Mode** on a spare iPhone, iPad or Mac to record around the clock.
+> On Mac, Kūki lives in the menu bar and records around the clock. On iPhone and iPad it records while open; Station Mode turns a spare device into a full-time monitor.
 
 ## 2. iCloud: deploy the data layout to Production (required)
 
-The iCloud record Kūki uses (`LatestAir`) currently exists only in the **Development** environment. App Store builds use **Production**, and without this step sync silently does nothing for real users.
+The iCloud records Kūki uses exist only in the **Development** environment until you deploy them. App Store builds use **Production**, and without this step sync silently does nothing for real users.
 
-1. Run a signed Debug build once with iCloud Sync on and a real reading, so the record type exists in Development. You've already done this.
+| Record type | Zone | Fields |
+|---|---|---|
+| `LatestAir` | default | co2, temperature, humidity, pm25 (Double) · placeName, placeKanji (String) · measuredAt (Date) · recentCO2 (Double list) · limit (Double) |
+| `HourChunk` | `KukiHistory` | deviceID, sensorName (String) · hourStart (Date) · payload (Bytes) |
+| `Place` | `KukiHistory` | name, kanji, originDeviceID, mergedInto (String) · sortIndex, deleted (Int64) · modifiedAt, createdAt (Date) |
+| `SensorState` | `KukiHistory` | currentPlaceID (String) · placeChangedAt (Date) |
+
+1. Run a signed Debug build with iCloud Sync on until it has recorded a reading, moved the sensor once and added (or renamed) a place, so every record type and field exists in Development. `LatestAir` you've already done; the three history types are new.
 2. Open **https://icloud.developer.apple.com** › **CloudKit Console** › container **iCloud.com.olshanskysoft.kuki**.
-3. **Schema › Indexes:** for record type `LatestAir`, add a **Queryable** index on `recordName`. iCloud wake-up subscriptions need it.
+3. **Schema › Indexes:** for record type `LatestAir`, add a **Queryable** index on `recordName`. iCloud wake-up subscriptions need it. (The history types need no indexes: CKSyncEngine reads zone changes, not queries.)
 4. **Schema › Deploy Schema Changes…** › deploy to **Production**.
 
 ## 3. App Store Connect: create the app
@@ -49,7 +56,7 @@ The iCloud record Kūki uses (`LatestAir`) currently exists only in the **Develo
 | Copyright | `2026 Lubomir Olshansky` |
 | Price | Free (Pricing and Availability) |
 
-**App Privacy** (the "nutrition label"): click **Get Started** › **"No, we do not collect data from this app"**. This is true: readings stay on the device and in the user's own iCloud.
+**App Privacy** (the "nutrition label"): click **Get Started** › **"No, we do not collect data from this app"**. This is true: readings stay on the user's devices and in the user's own private iCloud.
 
 ## 5. Store text
 
@@ -63,11 +70,11 @@ The iCloud record Kūki uses (`LatestAir`) currently exists only in the **Develo
 > • Move the sensor between rooms and compare them: history per place, averages, peaks, time over your limit.
 > • A soft wind-chime when it's time to open a window.
 > • Widgets, Lock Screen and Live Activity.
-> • Mac app with the reading in the menu bar.
+> • Mac: lives in the menu bar and records around the clock.
 > • Export to CSV, or an AI-ready summary for Claude or ChatGPT.
 > • Station Mode: leave a spare device on a charger and record around the clock.
 >
-> Records while Kūki is open (Apple Home only updates the app in front). No account, no tracking: your readings stay on your devices.
+> On iPhone and iPad, Kūki records while open (Apple Home only updates the app in front). No account, no tracking: your readings stay on your devices.
 
 **Keywords** (≤ 100 chars): `co2,air quality,carbon dioxide,homekit,sensor,ventilation,humidity,pm2.5,indoor air,room`
 
@@ -91,7 +98,7 @@ To use demo data in the simulator, launch with: `xcrun simctl launch <device> co
 
 Reviewers won't own an air sensor. Paste this into **App Review Information › Notes**:
 
-> Kūki reads air-quality sensors (e.g. IKEA ALPSTUGA) through HomeKit. To review without a sensor: open **Settings** (iPhone: Settings tab; Mac: Kūki › Settings… or ⌘,) and turn on **Demo sensor**. Optional: tap **Add 3 days of demo history** to see History and Export. HomeKit access is used only to read sensor values; nothing is controlled or sent anywhere. iCloud stores only the latest reading in the user's private database.
+> Kūki reads air-quality sensors (e.g. IKEA ALPSTUGA) through HomeKit. To review without a sensor: open **Settings** (iPhone: Settings tab; Mac: Kūki › Settings… or ⌘,) and turn on **Demo sensor**. Optional: tap **Add 3 days of demo history** to see History and Export. HomeKit access is used only to read sensor values; nothing is controlled or sent anywhere. With iCloud Sync on, the user's recorded history, place list and latest reading sync between their own devices through their private iCloud database.
 
 Sign-in required: **No**. Contact: your name, phone and email.
 

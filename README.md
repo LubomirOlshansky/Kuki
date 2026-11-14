@@ -26,9 +26,9 @@ Kūki reads an air-quality sensor from **Apple Home** and shows the one thing th
 | **Fūrin alert** | A soft, synthesised wind-bell (風鈴) and a notification when CO₂ crosses your limit (1000 ppm by default). It rings once per stuffy spell, not every minute. |
 | **Station Mode** | A dim, always-awake screen for a device left on a charger. It keeps Kūki in front, so it keeps recording. |
 | **Widgets & Live Activity** | Home Screen, Lock Screen, Dynamic Island and StandBy. They fade honestly when the reading is old. |
-| **Mac** | The reading in the **menu bar** (CO₂, temperature, humidity or PM2.5; your choice), plus *Move Sensor To*, Station Mode and Settings. File › Export. |
+| **Mac** | Runs from the **menu bar** and keeps recording 24/7, window open or not. Show CO₂, temperature, humidity or PM2.5 next to the clock; *Move Sensor To*, Station Mode, Settings, *Open at Login*. |
 | **Export** | CSV for spreadsheets, or a Markdown brief made to paste into **Claude or ChatGPT**: context, a summary per place, and the data averaged to fit a chat. |
-| **iCloud (optional)** | One record, the latest reading, in your private iCloud, so a station device's reading reaches your other devices' widgets, Lock Screen and alerts. |
+| **iCloud (optional)** | Through your private iCloud: each device's history, your places and which room the sensor is in sync between your devices, and the latest reading reaches your other devices' widgets, Lock Screen and alerts. |
 
 <p align="center">
   <img src="docs/images/wide.png" alt="Wide layout on iPad and Mac" width="78%"><br>
@@ -44,7 +44,7 @@ IKEA ALPSTUGA ──Thread──▶ Apple Home ──HomeKit──▶ Kūki (in 
 ```
 
 - **Apple Home is the bridge.** The ALPSTUGA speaks Matter over Thread. Once it's in the Home app, Kūki reads it through HomeKit. No IKEA hub or cloud is needed.
-- **Only the app in front can read Apple Home.** That's Apple's rule, on iPhone and on Mac. Kūki records while it's open; for round-the-clock data, leave a spare iPhone, iPad or Mac in **Station Mode**. When Kūki is in the background it says so ("Paused") rather than pretending the sensor vanished.
+- **Apple Home only talks to an app that's active.** On the **Mac**, Kūki runs as a menu bar app with a tiny invisible window, so macOS keeps it active and it **records around the clock**, even with its window closed (turn on *Show in Dock* and it becomes a normal app that pauses in the background). On **iPhone and iPad**, Kūki records while it's open; leave a spare device in **Station Mode** for continuous data. When Kūki can't hear the sensor it says why ("Paused") rather than pretending the sensor vanished.
 - **Honest values.** Every metric carries the time Apple Home last really reported it. Old values are never recorded or alerted on, and after a return Kūki shows *"Reaching your sensor…"* while Apple Home reconnects (usually 5–15 s).
 
 ## Design
@@ -85,7 +85,7 @@ xcodebuild test -project Kuki.xcodeproj -scheme Kuki -destination 'platform=iOS 
 ### Project layout
 
 ```
-Kuki/          the app: views, HomeKit source, recorder, export, bridges
+Kuki/          the app: views, HomeKit source, recorder, export, bridges, Sync/ (history sync, CKSyncEngine)
 Shared/        compiled into the app and the widget: palette, ensō, CO₂ levels, iCloud sync
 KukiWidget/    widgets and the Live Activity
 KukiMenuBar/   a small AppKit bundle the Mac app loads for its menu bar item
@@ -97,7 +97,7 @@ The Mac app is **Mac Catalyst**, because HomeKit on the Mac exists only for Cata
 
 ## Privacy
 
-No account, no analytics, no tracking. Readings stay on your devices. iCloud Sync, if on, stores only the latest reading in **your** private iCloud. See [PRIVACY.md](PRIVACY.md).
+No account, no analytics, no tracking. Readings stay on your devices. iCloud Sync, if on, keeps your history, places and latest reading in **your** private iCloud. See [PRIVACY.md](PRIVACY.md).
 
 ## Releasing
 

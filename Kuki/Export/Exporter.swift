@@ -284,6 +284,26 @@ enum Exporter {
         return try context.fetch(descriptor).map { Row($0, liveNames: names) }
     }
 
+    /// How many readings — and from how many places — `fetchRows` would
+    /// return, without loading them: a count, and only the place columns.
+    static func counts(container: ModelContainer, since start: Date, filter: SensorFilter) throws -> (samples: Int, places: Int) {
+        let context = ModelContext(container)
+        let demoName = DemoSensor.name
+        let predicate: Predicate<Reading>
+        if filter == .demoOnly {
+            predicate = #Predicate<Reading> { $0.timestamp >= start && $0.sensorName == demoName }
+        } else {
+            predicate = #Predicate<Reading> { $0.timestamp >= start && $0.sensorName != demoName }
+        }
+        let samples = try context.fetchCount(FetchDescriptor<Reading>(predicate: predicate))
+        var places = FetchDescriptor<Reading>(predicate: predicate)
+        places.propertiesToFetch = [\.placeID, \.placeName]
+        let keys = Set(try context.fetch(places).map { r in
+            r.placeID.map { "id:\($0.uuidString)" } ?? "name:\(r.placeName)"
+        })
+        return (samples, keys.count)
+    }
+
     static func fileName(_ ext: String) -> String {
         let stamp = Date.now.formatted(.iso8601.year().month().day())
         return "kuki-air-\(stamp).\(ext)"
@@ -292,15 +312,19 @@ enum Exporter {
 
 /// A file built lazily, only when the share sheet actually asks for it.
 struct ExportFile: Transferable {
-    enum Kind { case csv, markdown }
+    enum Kind: Hashable, Sendable { case csv, markdown }
     let kind: Kind
-    let range: ExportRange
+    /// Readings from this moment on.
+    let since: Date
     let limit: Double
     let sensor: String
     let filter: SensorFilter
     let container: ModelContainer
 
     static let markdownType = UTType("net.daringfireball.markdown") ?? .plainText
+
+    var contentType: UTType { kind == .csv ? .commaSeparatedText : Self.markdownType }
+    var fileExtension: String { kind == .csv ? "csv" : "md" }
 
     static var transferRepresentation: some TransferRepresentation {
         FileRepresentation(exportedContentType: .commaSeparatedText) { file in
@@ -315,7 +339,7 @@ struct ExportFile: Transferable {
     }
 
     private func write() throws -> SentTransferredFile {
-        let rows = try Exporter.fetchRows(container: container, since: range.start, filter: filter)
+        let rows = try Exporter.fetchRows(container: container, since: since, filter: filter)
         let text: String
         let name: String
         switch kind {

@@ -1,3 +1,4 @@
+import Accessibility
 import Charts
 import SwiftData
 import SwiftUI
@@ -5,29 +6,22 @@ import SwiftUI
 /// 記録 — how the air changed, and how the places compare.
 struct HistoryView: View {
     @Environment(Recorder.self) private var recorder
-    @State private var range: ChartRange = .day
-    @State private var metric: Metric = .co2
+    @Environment(AppNav.self) private var nav
+    @Environment(\.modelContext) private var context
 
     var body: some View {
+        @Bindable var nav = nav
         ScrollView {
             VStack(alignment: .leading, spacing: 26) {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text("記録").font(Typeface.mincho(24)).foregroundStyle(Ink.inkSoft)
-                    Text("History").font(.system(.largeTitle).weight(.ultraLight)).foregroundStyle(Ink.ink)
-                }
-                .padding(.top, 12)
+                PageTitle(kanji: "記録", title: "History") { shareMenu }
+                    .padding(.top, 12)
 
-                Picker("Range", selection: $range) {
+                Picker("Range", selection: $nav.historyRange) {
                     ForEach(ChartRange.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
 
-                Picker("Value", selection: $metric) {
-                    ForEach(Metric.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
-
-                HistoryBody(range: range, metric: metric, limit: recorder.co2Limit,
+                HistoryBody(range: nav.historyRange, metric: $nav.historyMetric, limit: recorder.co2Limit,
                             intervalMinutes: recorder.intervalMinutes, filter: recorder.sensorFilter)
             }
             .padding(.horizontal, 28)
@@ -36,6 +30,36 @@ struct HistoryView: View {
             .frame(maxWidth: .infinity)
         }
         .paperBackground()
+    }
+
+    /// Share what the chart shows: the same period, as a spreadsheet or as a
+    /// brief for an AI assistant.
+    private var shareMenu: some View {
+        Menu {
+            ShareLink(item: file(.csv), preview: SharePreview("Kūki air log (CSV)")) {
+                Label("Spreadsheet (CSV)", systemImage: "tablecells")
+            }
+            ShareLink(item: file(.markdown), preview: SharePreview("Kūki air log (Markdown)")) {
+                Label("For Claude or ChatGPT", systemImage: "doc.text")
+            }
+        } label: {
+            Image(systemName: "square.and.arrow.up")
+                .font(.title3)
+                .foregroundStyle(Ink.ink)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+                .quietHover(Circle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(QuietButtonStyle())
+        .menuIndicator(.hidden)
+        .accessibilityLabel("Share the \(nav.historyRange.spokenTitle)")
+        .help("Share the \(nav.historyRange.spokenTitle) as a file")
+    }
+
+    private func file(_ kind: ExportFile.Kind) -> ExportFile {
+        ExportFile(kind: kind, since: nav.historyRange.start, limit: recorder.co2Limit, sensor: recorder.sensorName,
+                   filter: recorder.sensorFilter, container: context.container)
     }
 }
 
@@ -70,9 +94,17 @@ enum ChartRange: String, CaseIterable, Identifiable, Sendable {
     /// Short axis labels that never collide: hours for a day, days for longer.
     var axisFormat: Date.FormatStyle {
         switch self {
-        case .hours3, .day: .dateTime.hour()
+        case .hours3: .dateTime.hour().minute()
+        case .day: .dateTime.hour()
         case .week: .dateTime.weekday(.abbreviated)
         case .month: .dateTime.day().month(.abbreviated)
+        }
+    }
+    /// How a selected moment is written in the chart's readout.
+    var readoutFormat: Date.FormatStyle {
+        switch self {
+        case .hours3, .day: .dateTime.hour().minute()
+        case .week, .month: .dateTime.weekday(.abbreviated).hour().minute()
         }
     }
     /// Bucket size that keeps the chart around a few hundred points.
@@ -95,6 +127,13 @@ struct HistoryModel: Sendable, Equatable {
         var id: String { key }
     }
 
+    /// What the model was built for — a new key crossfades the chart.
+    struct Key: Hashable, Sendable {
+        let range: ChartRange
+        let metric: Metric
+    }
+
+    var key = Key(range: .day, metric: .co2)
     var points: [HistoryBody.ChartPoint] = []
     var series: [Series] = []
     var stats: [PlaceStats] = []
@@ -104,8 +143,8 @@ struct HistoryModel: Sendable, Equatable {
         let downsampled = Exporter.downsample(rows, minutes: range.bucketMinutes)
         let gap = HistoryBody.segmentGap(bucketMinutes: range.bucketMinutes, intervalMinutes: intervalMinutes)
         let points = HistoryBody.segments(downsampled, gap: gap, metric: metric)
-        return HistoryModel(points: points, series: orderedSeries(rows), stats: PlaceStats.compute(rows, limit: limit),
-                            rowCount: rows.count)
+        return HistoryModel(key: Key(range: range, metric: metric), points: points, series: orderedSeries(rows),
+                            stats: PlaceStats.compute(rows, limit: limit), rowCount: rows.count)
     }
 
     /// Places in order of first appearance, keyed by place (not name), with
@@ -126,18 +165,40 @@ struct HistoryModel: Sendable, Equatable {
             return Series(key: key, name: name)
         }
     }
+
+    /// The plotted point closest in time to `time`.
+    func nearest(to time: Date) -> HistoryBody.ChartPoint? {
+        Self.nearest(in: points, to: time)
+    }
+
+    /// Binary search over time-ordered points.
+    static func nearest(in points: [HistoryBody.ChartPoint], to time: Date) -> HistoryBody.ChartPoint? {
+        guard !points.isEmpty else { return nil }
+        var lo = 0, hi = points.count - 1
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if points[mid].time < time { lo = mid + 1 } else { hi = mid }
+        }
+        if lo > 0, abs(points[lo - 1].time.timeIntervalSince(time)) <= abs(points[lo].time.timeIntervalSince(time)) {
+            return points[lo - 1]
+        }
+        return points[lo]
+    }
 }
 
 struct HistoryBody: View {
     @Environment(\.modelContext) private var context
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let range: ChartRange
-    let metric: Metric
+    @Binding var metric: Metric
     let limit: Double
     let intervalMinutes: Int
     let filter: SensorFilter
 
     @State private var model: HistoryModel?
+    /// The moment under the finger (or, on the Mac, the pointer).
+    @State private var selectedTime: Date?
 
     private struct LoadKey: Hashable {
         let range: ChartRange, metric: Metric, limit: Double, interval: Int, filter: SensorFilter
@@ -145,6 +206,19 @@ struct HistoryBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 30) {
+            VStack(alignment: .leading, spacing: 8) {
+                metricMenu
+                if let model, model.rowCount >= 2 {
+                    // The chart's takeaway, in words (HIG › Charting data).
+                    Text(Self.headline(model.stats, metric: model.key.metric, limit: limit))
+                        .font(Typeface.title)
+                        .foregroundStyle(Ink.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .id(model.key)
+                        .transition(.opacity)
+                }
+            }
+
             if let model {
                 if model.rowCount < 2 {
                     Text(emptyText)
@@ -154,6 +228,8 @@ struct HistoryBody: View {
                 } else {
                     chart(model)
                         .frame(height: 280)
+                        .id(model.key)
+                        .transition(.opacity)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text("By place").kukiLabel()
@@ -162,10 +238,10 @@ struct HistoryBody: View {
                             .foregroundStyle(Ink.inkSoft)
                     }
                     VStack(spacing: 0) {
-                        let scale = model.stats.compactMap { $0.average(metric) }.max() ?? 1
+                        let scale = model.stats.compactMap { $0.average(model.key.metric) }.max() ?? 1
                         ForEach(model.stats) { s in
                             let index = seriesIndex(s.key, in: model)
-                            PlaceStatRow(stats: s, metric: metric, limit: limit,
+                            PlaceStatRow(stats: s, metric: model.key.metric, limit: limit,
                                          color: Ink.series[index % Ink.series.count],
                                          symbol: differentiateWithoutColor ? Self.symbols[index % Self.symbols.count] : nil,
                                          scaleMax: scale)
@@ -190,10 +266,30 @@ struct HistoryBody: View {
                     return HistoryModel.build(rows, range: range, metric: metric, limit: limit, intervalMinutes: interval)
                 }.value
                 if Task.isCancelled { break }
-                if built != model { model = built }
+                if built != model {
+                    if built.key != model?.key {
+                        // A different question: crossfade, never morph one
+                        // metric's line into another's.
+                        selectedTime = nil
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) { model = built }
+                    } else {
+                        model = built // the minute's refresh: no animation
+                    }
+                }
                 try? await Task.sleep(for: .seconds(60))
             }
         }
+    }
+
+    /// Which value the page is about — CO₂, temperature, humidity or PM2.5 —
+    /// as visible buttons: a menu hid them too well.
+    private var metricMenu: some View {
+        Picker("Value", selection: $metric) {
+            ForEach(Metric.allCases) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .accessibilityLabel("Value shown")
+        .help("Choose which value the chart shows")
     }
 
     private var emptyText: String {
@@ -205,19 +301,51 @@ struct HistoryBody: View {
         model.series.firstIndex { $0.key == key } ?? 0
     }
 
+    struct Gap: Identifiable, Equatable {
+        let id: Int
+        let from: ChartPoint
+        let to: ChartPoint
+        var middle: Date { from.time.addingTimeInterval(to.time.timeIntervalSince(from.time) / 2) }
+    }
+
+    /// Stretches with no readings longer than `threshold` seconds — drawn as
+    /// a dashed "no data" bridge instead of being silently skipped.
+    nonisolated static func gaps(_ points: [ChartPoint], threshold: TimeInterval) -> [Gap] {
+        let sorted = points.sorted { $0.time < $1.time }
+        var out: [Gap] = []
+        for (a, b) in zip(sorted, sorted.dropFirst()) where b.time.timeIntervalSince(a.time) > threshold {
+            out.append(Gap(id: out.count, from: a, to: b))
+        }
+        return out
+    }
+
+    /// Padding around non-CO₂ values so a steady temperature isn't a flat
+    /// line glued to the frame.
+    nonisolated static func domain(for values: [Double]) -> ClosedRange<Double> {
+        let lo = values.min() ?? 0, hi = values.max() ?? 1
+        let pad = max((hi - lo) * 0.2, max(abs(hi) * 0.02, 0.5))
+        return (lo - pad)...(hi + pad)
+    }
+
     static let symbols: [BasicChartSymbolShape] = [.circle, .square, .triangle, .diamond, .pentagon, .cross]
     static let dashes: [[CGFloat]] = [[], [6, 3], [1.5, 3], [8, 3, 1.5, 3], [3, 3], [10, 4]]
 
     private func chart(_ model: HistoryModel) -> some View {
+        let metric = model.key.metric
+        let range = model.key.range
         let names = Dictionary(uniqueKeysWithValues: model.series.map { ($0.key, $0.name) })
         let domain = model.series.map(\.name)
+        let selected = selectedTime.flatMap { model.nearest(to: $0) }
+        let values = model.points.map(\.value)
+        let co2Scale = TraceScale(values: values, limit: limit)
+        let gaps = Self.gaps(model.points, threshold: Double(max(range.bucketMinutes, intervalMinutes)) * 60 * 3)
         return Chart {
-            if metric == .co2 {
+            if metric == .co2 && co2Scale.showsLimit {
                 RuleMark(y: .value("Limit", limit))
                     .foregroundStyle(Ink.shu.opacity(0.4))
                     .lineStyle(StrokeStyle(lineWidth: 0.75, dash: [3, 4]))
                     .annotation(position: .top, alignment: .leading) {
-                        Text("\(Metric.co2.format(limit)) ppm").font(.caption2).foregroundStyle(Ink.shu)
+                        Text("limit \(Metric.co2.format(limit))").font(.caption2).foregroundStyle(Ink.shu)
                     }
             }
             // One line per *visit*: colour says which place, but a new
@@ -255,31 +383,115 @@ struct HistoryBody: View {
                         .interpolationMethod(.catmullRom)
                 }
             }
+
+            // Hours with no readings (the app was closed, or not in front):
+            // a faint dashed bridge, labelled when the gap is wide enough.
+            ForEach(gaps) { gap in
+                LineMark(x: .value("Time", gap.from.time), y: .value(metric.title, gap.from.value),
+                         series: .value("Gap", "gap-\(gap.id)"))
+                    .foregroundStyle(Ink.inkFaint)
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 4]))
+                LineMark(x: .value("Time", gap.to.time), y: .value(metric.title, gap.to.value),
+                         series: .value("Gap", "gap-\(gap.id)"))
+                    .foregroundStyle(Ink.inkFaint)
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 4]))
+                if gap.to.time.timeIntervalSince(gap.from.time) > range.seconds * 0.12 {
+                    PointMark(x: .value("Time", gap.middle), y: .value(metric.title, (gap.from.value + gap.to.value) / 2))
+                        .opacity(0)
+                        .annotation(position: .top, spacing: 2) {
+                            Text("no data").font(.caption2).foregroundStyle(Ink.inkSoft)
+                        }
+                }
+            }
+
+            // The readout: a hairline at the chosen moment and what the air was.
+            if let selected {
+                let place = names[selected.placeKey] ?? selected.place
+                RuleMark(x: .value("Selected", selected.time))
+                    .foregroundStyle(Ink.inkFaint)
+                    .lineStyle(StrokeStyle(lineWidth: 0.75))
+                    .annotation(position: .top, alignment: .center, spacing: 4,
+                                overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                        ChartReadout(value: "\(metric.format(selected.value)) \(metric.unit)",
+                                     detail: "\(place) · \(selected.time.formatted(range.readoutFormat))")
+                    }
+                PointMark(x: .value("Selected", selected.time), y: .value(metric.title, selected.value))
+                    .foregroundStyle(Ink.ink)
+                    .symbolSize(36)
+            }
         }
-        .animation(.smooth(duration: 0.5), value: metric)
-        .animation(.smooth(duration: 0.5), value: range)
         .chartForegroundStyleScale(domain: domain, range: domain.indices.map { Ink.series[$0 % Ink.series.count] })
         // Shapes in the legend only when they also mark the lines; otherwise plain dots.
         .chartSymbolScale(domain: domain, range: domain.indices.map {
             differentiateWithoutColor ? Self.symbols[$0 % Self.symbols.count] : BasicChartSymbolShape.circle
         })
-        .chartYScale(domain: .automatic(includesZero: false))
+        .chartYScale(domain: metric == .co2 ? co2Scale.domain : Self.domain(for: values))
         .chartLegend(position: .bottom, alignment: .leading, spacing: 14)
         .chartXAxis {
-            AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+            // `.aligned` keeps the last label inside the plot instead of
+            // clipping it at the trailing edge.
+            AxisMarks(preset: .aligned, values: .automatic(desiredCount: 4)) { _ in
                 AxisGridLine().foregroundStyle(Ink.hairline)
                 AxisValueLabel(format: range.axisFormat).foregroundStyle(Ink.inkSoft)
             }
         }
         .chartYAxis {
-            AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { _ in
+            AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { value in
                 AxisGridLine().foregroundStyle(Ink.hairline)
-                AxisValueLabel().foregroundStyle(Ink.inkSoft)
+                // The limit line carries its own label; don't say 1,000 twice.
+                if !(metric == .co2 && value.as(Double.self) == limit) {
+                    AxisValueLabel().foregroundStyle(Ink.inkSoft)
+                }
             }
         }
-        .accessibilityElement(children: .contain)
+        #if targetEnvironment(macCatalyst)
+        // On the Mac the readout follows the pointer.
+        .chartOverlay { proxy in
+            GeometryReader { geo in
+                Rectangle().fill(.clear).contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active(let location):
+                            guard let plot = proxy.plotFrame else { return }
+                            let x = location.x - geo[plot].origin.x
+                            selectedTime = x >= 0 && x <= geo[plot].width ? proxy.value(atX: x, as: Date.self) : nil
+                        case .ended:
+                            selectedTime = nil
+                        }
+                    }
+            }
+        }
+        #else
+        .chartXSelection(value: $selectedTime)
+        #endif
         .accessibilityLabel("\(metric.longTitle), \(range.spokenTitle), by place")
-        .accessibilityValue(Self.summary(model.stats, metric: metric, limit: limit))
+        .accessibilityChartDescriptor(HistoryChartDescriptor(model: model, names: names, limit: limit))
+    }
+
+    /// The chart's takeaway, written to be read: "Bedroom was over the limit
+    /// 82% of the time."
+    nonisolated static func headline(_ stats: [PlaceStats], metric: Metric, limit: Double) -> String {
+        if metric == .co2 {
+            let over = stats.filter { ($0.shareOverLimit ?? 0) > 0 }
+                .max { ($0.shareOverLimit ?? 0) < ($1.shareOverLimit ?? 0) }
+            if let over, let share = over.shareOverLimit {
+                return "\(over.place) was over the limit \(Int((share * 100).rounded()))% of the time."
+            }
+            if let worst = stats.first, let avg = worst.avgCO2 {
+                return "Every place stayed under \(Metric.co2.format(limit)) ppm. \(worst.place) averaged \(Metric.co2.format(avg))."
+            }
+            return "No CO₂ readings in this period."
+        }
+        guard let top = stats.filter({ $0.average(metric) != nil })
+            .max(by: { ($0.average(metric) ?? 0) < ($1.average(metric) ?? 0) }),
+              let value = top.average(metric) else { return "No \(metric.longTitle.lowercased()) readings in this period." }
+        let v = metric.format(value)
+        switch metric {
+        case .temperature: return "\(top.place) was the warmest, \(v) °C on average."
+        case .humidity: return "\(top.place) was the most humid, \(v) % on average."
+        case .pm25: return "\(top.place) had the most fine particles, \(v) µg/m³ on average."
+        case .co2: return ""
+        }
     }
 
     /// One sentence a VoiceOver user can take away instead of the chart.
@@ -301,8 +513,18 @@ struct HistoryBody: View {
         return "\(top.place) averaged highest, \(metric.spoken(value))."
     }
 
+    /// How far round a place's small ensō reaches: CO₂ on the same scale as
+    /// the big one; other values relative to the highest place.
+    nonisolated static func ensoFraction(metric: Metric, average: Double?, scaleMax: Double) -> Double {
+        guard let average else { return 0.06 }
+        if metric == .co2 { return EnsoRing.fraction(for: average) }
+        return min(0.94, max(0.06, 0.06 + 0.88 * average / max(scaleMax, 0.01)))
+    }
+
     struct ChartPoint: Identifiable, Sendable, Equatable {
-        let id: Int
+        /// Place and moment — stable across the minute's reloads, so Charts
+        /// matches the same reading to itself (never an array position).
+        let id: String
         let time: Date
         let value: Double
         let placeKey: String
@@ -310,6 +532,10 @@ struct HistoryBody: View {
         let segment: Int
         /// The only point of its visit — drawn as a dot.
         var isSingle: Bool
+
+        static func id(placeKey: String, time: Date) -> String {
+            "\(placeKey)|\(Int(time.timeIntervalSince1970.rounded()))"
+        }
     }
 
     /// The longest pause that still counts as one visit: three buckets, but
@@ -334,8 +560,8 @@ struct HistoryBody: View {
                 segment += 1
                 countInSegment = 0
             }
-            out.append(ChartPoint(id: out.count, time: r.time, value: v, placeKey: r.placeKey,
-                                  place: r.place, segment: segment, isSingle: false))
+            out.append(ChartPoint(id: ChartPoint.id(placeKey: r.placeKey, time: r.time), time: r.time, value: v,
+                                  placeKey: r.placeKey, place: r.place, segment: segment, isSingle: false))
             countInSegment += 1
             previous = r
         }
@@ -344,6 +570,58 @@ struct HistoryBody: View {
     }
 }
 
+/// "812 ppm / Bedroom · 14:05" — floated over the chart at the chosen moment.
+private struct ChartReadout: View {
+    let value: String
+    let detail: String
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(value).font(.subheadline.monospacedDigit()).foregroundStyle(Ink.ink)
+            Text(detail).font(.caption2).foregroundStyle(Ink.inkSoft)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Ink.paperRaised))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Ink.hairline, lineWidth: 0.5))
+    }
+}
+
+/// The History chart for VoiceOver's Audio Graph and Describe Chart: one
+/// series per place.
+private struct HistoryChartDescriptor: AXChartDescriptorRepresentable {
+    let model: HistoryModel
+    let names: [String: String]
+    let limit: Double
+
+    func makeChartDescriptor() -> AXChartDescriptor {
+        let metric = model.key.metric
+        let times = model.points.map { $0.time.timeIntervalSince1970 }
+        let values = model.points.map(\.value)
+        let lo = values.min() ?? 0
+        let t0 = times.min() ?? 0
+        let x = AXNumericDataAxisDescriptor(
+            title: "Time", range: t0...(max(times.max() ?? 1, t0 + 1)), gridlinePositions: []
+        ) { Date(timeIntervalSince1970: $0).formatted(date: .abbreviated, time: .shortened) }
+        let y = AXNumericDataAxisDescriptor(
+            title: metric.longTitle, range: lo...(max(values.max() ?? 1, lo + 1)),
+            gridlinePositions: metric == .co2 ? [limit] : []
+        ) { "\(metric.format($0)) \(metric.spokenUnit)" }
+        let grouped = Dictionary(grouping: model.points, by: \.placeKey)
+        let series = model.series.compactMap { s -> AXDataSeriesDescriptor? in
+            guard let points = grouped[s.key] else { return nil }
+            return AXDataSeriesDescriptor(
+                name: names[s.key] ?? s.name, isContinuous: true,
+                dataPoints: points.map { AXDataPoint(x: $0.time.timeIntervalSince1970, y: $0.value) })
+        }
+        return AXChartDescriptor(title: "\(metric.longTitle), \(model.key.range.spokenTitle)",
+                                 summary: HistoryBody.summary(model.stats, metric: metric, limit: limit),
+                                 xAxis: x, yAxis: y, additionalAxes: [], series: series)
+    }
+}
+
+/// One place: a small ensō for its average — the same language as the big
+/// one — its name, and the numbers behind it.
 private struct PlaceStatRow: View {
     let stats: PlaceStats
     let metric: Metric
@@ -353,47 +631,45 @@ private struct PlaceStatRow: View {
     let symbol: BasicChartSymbolShape?
     let scaleMax: Double
 
+    @ScaledMetric(relativeTo: .body) private var ensoSize: CGFloat = 30
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                if let symbol {
-                    symbol.fill(color)
-                        .frame(width: 8, height: 8)
-                        .accessibilityHidden(true)
-                } else {
-                    Circle().fill(color).frame(width: 7, height: 7)
-                        .accessibilityHidden(true)
-                }
-                Text(stats.place).font(Typeface.body).foregroundStyle(Ink.ink)
-                Spacer()
-                Text("avg").kukiLabel()
-                Text(metric.format(average))
-                    .font(.system(.title3).weight(.light).monospacedDigit())
-                    .foregroundStyle(Ink.ink)
-                Text(metric.unit).font(.caption).foregroundStyle(Ink.inkSoft)
-            }
-            GeometryReader { geo in
-                Capsule().fill(Ink.hairline)
-                    .overlay(alignment: .leading) {
-                        Capsule().fill(color.opacity(0.75))
-                            .frame(width: geo.size.width * min(1, (average ?? 0) / max(scaleMax, 0.01)))
+        HStack(alignment: .center, spacing: 14) {
+            EnsoRing(fraction: HistoryBody.ensoFraction(metric: metric, average: average, scaleMax: scaleMax),
+                     color: color, lineWidth: 3, animated: false)
+                .frame(width: ensoSize, height: ensoSize)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    if let symbol {
+                        symbol.fill(color)
+                            .frame(width: 8, height: 8)
+                            .accessibilityHidden(true)
                     }
-            }
-            .frame(height: 3)
-            HStack(spacing: 16) {
-                Text(String(format: "%.1f h observed", stats.hours))
-                if metric == .co2 {
-                    if let peak = stats.peakCO2 { Text("peak \(Metric.co2.format(peak))") }
-                    if let share = stats.shareOverLimit {
-                        Text("\(Int((share * 100).rounded()))% over \(Metric.co2.format(limit))")
-                            .foregroundStyle(share > 0.2 ? Ink.shu : Ink.inkSoft)
+                    Text(stats.place).font(Typeface.body).foregroundStyle(Ink.ink)
+                    Spacer()
+                    Text("avg").kukiLabel()
+                    Text(metric.format(average))
+                        .font(.system(.title3).monospacedDigit())
+                        .foregroundStyle(Ink.ink)
+                    Text(metric.unit).font(.caption).foregroundStyle(Ink.inkSoft)
+                }
+                HStack(spacing: 16) {
+                    Text(String(format: "%.1f h observed", stats.hours))
+                    if metric == .co2 {
+                        if let peak = stats.peakCO2 { Text("peak \(Metric.co2.format(peak))") }
+                        if let share = stats.shareOverLimit {
+                            Text("\(Int((share * 100).rounded()))% over \(Metric.co2.format(limit))")
+                                .foregroundStyle(share > 0.2 ? Ink.shu : Ink.inkSoft)
+                        }
                     }
                 }
+                .font(.caption)
+                .foregroundStyle(Ink.inkSoft)
             }
-            .font(.caption)
-            .foregroundStyle(Ink.inkSoft)
         }
-        .padding(.vertical, 16)
+        .padding(.vertical, 14)
+        .accessibilityElement(children: .combine)
     }
 
     private var average: Double? { stats.average(metric) }

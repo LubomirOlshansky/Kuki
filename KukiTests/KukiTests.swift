@@ -16,18 +16,34 @@ struct CO2LevelTests {
     }
 
     @Test func ensoNeverClosesOrVanishes() {
-        #expect(EnsoRing.fraction(for: 0) == 0.06)
-        #expect(EnsoRing.fraction(for: 400) == 0.06)
+        #expect(EnsoRing.fraction(for: 0) == 0.10)
+        #expect(EnsoRing.fraction(for: 400) == 0.10)
         #expect(EnsoRing.fraction(for: 10_000) == 0.94)
         #expect(abs(EnsoRing.fraction(for: 1200) - 0.5) < 0.0001)
     }
 
     @Test func motesGrowWithCO2() {
-        #expect(AirMotes.count(for: 400) == 6)
         #expect(AirMotes.count(for: 2000) == 90)
         #expect(AirMotes.count(for: 9000) == 90)
         let samples = stride(from: 400.0, through: 2000, by: 100).map(AirMotes.count)
         #expect(samples == samples.sorted())
+    }
+
+    @Test func clearAirHasNoMotes() {
+        #expect(AirMotes.count(for: 400) == 0)
+        #expect(AirMotes.count(for: 799) == 0)
+        #expect(AirMotes.count(for: 800) > 0)
+    }
+
+    @Test func motesKeepOffTheReading() {
+        let zone = AirMotes.exclusion(digits: 3)
+        #expect(AirMotes.exclusionFade(x: 0, y: 0, zone: zone) == 0, "never on the numbers")
+        #expect(AirMotes.exclusionFade(x: 0.3, y: 0.2, zone: zone) == 0)
+        #expect(AirMotes.exclusionFade(x: 0, y: 0.8, zone: zone) == 1, "free above and below")
+        #expect(AirMotes.exclusionFade(x: 0.85, y: 0, zone: zone) == 1)
+        let edge = AirMotes.exclusionFade(x: 0, y: zone.height + 0.06, zone: zone)
+        #expect(edge > 0 && edge < 1, "softened at the edge")
+        #expect(AirMotes.exclusion(digits: 4).width > zone.width, "a wider reading clears more room")
     }
 
     @Test func motesFadeOneAfterAnother() {
@@ -574,5 +590,217 @@ struct WidgetSnapshotTests {
         CloudWake.alertIfNeeded(s, now: t.addingTimeInterval(60), defaults: defaults)
         let gate2 = try JSONDecoder().decode(AlertGate.self, from: try #require(defaults.data(forKey: "cloudAlertGate")))
         #expect(gate2.lastAlertAt == t, "stays quiet while still stuffy")
+    }
+}
+
+
+@Suite("Recent trace scale")
+struct TraceScaleTests {
+    @Test func calmAirZoomsToTheDataAndHidesTheLimit() {
+        let scale = TraceScale(values: [418, 420, 422, 423], limit: 1000)
+        #expect(!scale.showsLimit)
+        #expect(scale.domain.lowerBound > 380 && scale.domain.upperBound < 450)
+    }
+
+    @Test func nearTheLimitShowsIt() {
+        let scale = TraceScale(values: [700, 850, 920], limit: 1000)
+        #expect(scale.showsLimit)
+        #expect(scale.domain.upperBound > 1000)
+    }
+}
+
+
+// MARK: - Brush ensō
+
+@Suite("Ensō brush")
+struct EnsoBrushTests {
+    @Test func pressAtTheStartTaperAtTheTail() {
+        let w = 9.0, length = 300.0
+        #expect(EnsoGeometry.width(at: 0, length: length, lineWidth: w) > w * 1.15, "the brush lands heavy")
+        #expect(EnsoGeometry.width(at: length, length: length, lineWidth: w) < w * 0.3, "and lifts thin")
+        let body = EnsoGeometry.width(at: length / 2, length: length, lineWidth: w)
+        #expect(body > w * 0.9 && body < w * 1.1)
+    }
+
+    @Test func tinyStrokesStayPositive() {
+        // The 18 pt Dynamic Island mark: a short arc must still be a mark.
+        for d in stride(from: 0.0, through: 3.4, by: 0.2) {
+            #expect(EnsoGeometry.width(at: d, length: 3.4, lineWidth: 2.5) > 0)
+        }
+        #expect(EnsoGeometry.width(at: 1, length: 0, lineWidth: 2.5) == 0)
+    }
+
+    @Test func outlineStaysInItsFrame() {
+        for size in [18.0, 44, 70, 118, 256] {
+            let lw = max(2.5, size / 28)
+            let rect = CGRect(x: 0, y: 0, width: size, height: size)
+            let bounds = EnsoBrush(reach: 0.94, lineWidth: lw).path(in: rect).boundingRect
+            // Like a stroked circle, at most about half the line width spills out.
+            #expect(rect.insetBy(dx: -lw * 0.7, dy: -lw * 0.7).contains(bounds))
+            #expect(EnsoBrush(reach: 0, lineWidth: lw).path(in: rect).isEmpty)
+        }
+    }
+
+    @Test func kasureOnlyOnLongEnoughStrokes() {
+        let rect = CGRect(x: 0, y: 0, width: 256, height: 256)
+        #expect(!EnsoKasure(reach: 0.5, lineWidth: 9).path(in: rect).isEmpty)
+        #expect(EnsoKasure(reach: 0.005, lineWidth: 9).path(in: rect).isEmpty)
+    }
+}
+
+// MARK: - Now screen
+
+@Suite("Settling")
+struct SettleProgressTests {
+    @Test func inkDriesAsTheSensorSettles() {
+        #expect(SettleProgress.wetness(changedAt: base, minutes: 10, now: base) == 1)
+        #expect(abs(SettleProgress.wetness(changedAt: base, minutes: 10, now: base.addingTimeInterval(300)) - 0.5) < 0.001)
+        #expect(SettleProgress.wetness(changedAt: base, minutes: 10, now: base.addingTimeInterval(900)) == 0)
+        #expect(SettleProgress.wetness(changedAt: base, minutes: 0, now: base) == 0, "settling off: always dry")
+    }
+
+    @Test func minutesLeftRoundUp() {
+        #expect(SettleProgress.minutesLeft(changedAt: base, minutes: 10, now: base.addingTimeInterval(30)) == 10)
+        #expect(SettleProgress.minutesLeft(changedAt: base, minutes: 10, now: base.addingTimeInterval(541)) == 1)
+        #expect(SettleProgress.minutesLeft(changedAt: base, minutes: 10, now: base.addingTimeInterval(600)) == 0)
+        #expect(SettleProgress.minutesLeft(changedAt: .distantPast, minutes: 10, now: base) == 0)
+    }
+}
+
+// MARK: - History chart (selection, identity, headline)
+
+@Suite("History chart — identity and readout")
+struct HistoryChartTests {
+    @Test func pointIdsSurviveTheMinutesReload() {
+        let first = (0..<10).map { row(Double($0), $0 < 5 ? "Kitchen" : "Study") }
+        // A minute later: the oldest reading has left the window, a new one arrived.
+        let later = Array(first.dropFirst()) + [row(10, "Study")]
+        let a = HistoryBody.segments(first, gap: 15 * 60)
+        let b = HistoryBody.segments(later, gap: 15 * 60)
+        let idsA = Dictionary(uniqueKeysWithValues: a.map { ($0.id, $0.time) })
+        for p in b where idsA[p.id] != nil {
+            #expect(idsA[p.id] == p.time, "the same id means the same reading")
+        }
+        #expect(Set(a.map(\.id)).intersection(b.map(\.id)).count == 9)
+        #expect(Set(b.map(\.id)).count == b.count, "ids are unique")
+    }
+
+    @Test func nearestPointToAMoment() {
+        let points = HistoryBody.segments((0..<6).map { row(Double($0) * 10, "Hall") }, gap: 3600)
+        #expect(HistoryModel.nearest(in: points, to: base.addingTimeInterval(14 * 60))?.time == base.addingTimeInterval(10 * 60))
+        #expect(HistoryModel.nearest(in: points, to: base.addingTimeInterval(16 * 60))?.time == base.addingTimeInterval(20 * 60))
+        #expect(HistoryModel.nearest(in: points, to: base.addingTimeInterval(-600))?.time == base)
+        #expect(HistoryModel.nearest(in: points, to: base.addingTimeInterval(9999 * 60))?.time == base.addingTimeInterval(50 * 60))
+        #expect(HistoryModel.nearest(in: [], to: base) == nil)
+    }
+
+    @Test func headlineReadsLikeASentence() {
+        let rows = [row(0, "Bedroom", co2: 1200), row(1, "Bedroom", co2: 1300), row(2, "Study", co2: 700)]
+        let stats = PlaceStats.compute(rows, limit: 1000)
+        #expect(HistoryBody.headline(stats, metric: .co2, limit: 1000) == "Bedroom was over the limit 100% of the time.")
+        let calm = PlaceStats.compute([row(0, "Study", co2: 650), row(1, "Study", co2: 700)], limit: 1000)
+        #expect(HistoryBody.headline(calm, metric: .co2, limit: 1000) == "Every place stayed under 1000 ppm. Study averaged 675.")
+        let warm = PlaceStats.compute([row(0, "Kitchen", temp: 24), row(1, "Study", temp: 20)], limit: 1000)
+        #expect(HistoryBody.headline(warm, metric: .temperature, limit: 1000) == "Kitchen was the warmest, 24.0 °C on average.")
+    }
+
+    @Test func placeEnsoUsesTheSameScaleAsTheBigOne() {
+        #expect(HistoryBody.ensoFraction(metric: .co2, average: 1200, scaleMax: 1300) == EnsoRing.fraction(for: 1200))
+        #expect(abs(HistoryBody.ensoFraction(metric: .temperature, average: 20, scaleMax: 20) - 0.94) < 0.0001)
+        #expect(HistoryBody.ensoFraction(metric: .humidity, average: nil, scaleMax: 50) == 0.06)
+    }
+}
+
+// MARK: - Station mode
+
+@Suite("Station mode")
+struct StationTests {
+    @Test func everyLineIsLegibleOnBlack() {
+        for contrast in [false, true] {
+            let style = StationStyle(increasedContrast: contrast)
+            for opacity in [style.numeral, style.secondary, style.tertiary] {
+                #expect(StationStyle.contrastOnBlack(opacity: opacity) >= 4.5)
+            }
+        }
+        #expect(StationStyle(increasedContrast: true).secondary > StationStyle().secondary)
+    }
+
+    @Test func driftStaysSmallAndMoves() {
+        let offsets = (0..<120).map(StationDrift.offset(minute:))
+        #expect(offsets.allSatisfy { abs($0.width) <= StationDrift.reach && abs($0.height) <= StationDrift.reach })
+        #expect(Set(offsets.map { "\(Int($0.width)),\(Int($0.height))" }).count > 10, "it really wanders")
+        #expect(StationDrift.minute(of: base) == StationDrift.minute(of: base.addingTimeInterval(59)) ||
+                StationDrift.minute(of: base) + 1 == StationDrift.minute(of: base.addingTimeInterval(59)))
+    }
+
+    @Test func stationKeepsTheDisplayAwake() {
+        #expect(Recorder.stationActivityOptions.contains(.idleDisplaySleepDisabled))
+        #expect(Recorder.stationActivityOptions.contains(.idleSystemSleepDisabled))
+    }
+}
+
+// MARK: - Notifications
+
+@Suite("Fūrin notification")
+struct FurinTests {
+    @Test func neverRingsTwice() {
+        #expect(Furin.notificationSound(appRings: true) == nil)
+        #expect(Furin.notificationSound(appRings: false) != nil)
+        #expect(!Furin.presentationOptions(appRings: true).contains(.sound))
+        #expect(Furin.presentationOptions(appRings: false).contains(.sound))
+        #expect(Furin.presentationOptions(appRings: true).contains(.banner))
+    }
+
+    @Test func soundIsBundled() {
+        #expect(Bundle.main.url(forResource: "furin", withExtension: "caf") != nil)
+    }
+}
+
+// MARK: - Export counts
+
+@Suite("Export counts")
+struct ExportCountTests {
+    @Test func countsMatchTheRowsWithoutLoadingThem() throws {
+        let container = try memoryContainer()
+        let context = ModelContext(container)
+        let now = Date.now
+        let kitchen = UUID()
+        for (i, (placeID, name)) in [(kitchen, "Kitchen"), (kitchen, "Kitchen"), (nil, "Hall"), (nil, "Porch")].enumerated() {
+            context.insert(Reading(timestamp: now.addingTimeInterval(-Double(i) * 60), co2: 700, temperature: nil,
+                                   humidity: nil, pm25: nil, placeID: placeID, placeName: name,
+                                   settling: false, sensorName: "ALPSTUGA"))
+        }
+        context.insert(Reading(timestamp: now, co2: 700, temperature: nil, humidity: nil, pm25: nil, placeID: nil,
+                               placeName: "Demo room", settling: false, sensorName: DemoSensor.name))
+        try context.save()
+        let since = now.addingTimeInterval(-3600)
+        let rows = try Exporter.fetchRows(container: container, since: since, filter: .excludingDemo)
+        let counts = try Exporter.counts(container: container, since: since, filter: .excludingDemo)
+        #expect(counts.samples == rows.count)
+        #expect(counts.places == Set(rows.map(\.placeKey)).count)
+        #expect(counts.places == 3)
+    }
+}
+
+
+@Suite("History gaps & scale")
+struct HistoryGapTests {
+    private func point(_ minutes: Double, _ value: Double = 500, segment: Int = 0) -> HistoryBody.ChartPoint {
+        let t = Date(timeIntervalSince1970: 1_800_000_000 + minutes * 60)
+        return HistoryBody.ChartPoint(id: "\(minutes)", time: t, value: value, placeKey: "a", place: "A",
+                                      segment: segment, isSingle: false)
+    }
+
+    @Test func gapsAppearOnlyWhereReadingsStop() {
+        let points = [point(0), point(1), point(2), point(40, segment: 1), point(41, segment: 1)]
+        let gaps = HistoryBody.gaps(points, threshold: 3 * 60)
+        #expect(gaps.count == 1)
+        #expect(gaps[0].from.time == points[2].time && gaps[0].to.time == points[3].time)
+    }
+
+    @Test func steadyTemperatureGetsBreathingRoom() {
+        let d = HistoryBody.domain(for: [20.7, 20.8, 20.75])
+        #expect(d.lowerBound < 20.7 && d.upperBound > 20.8)
+        #expect(d.upperBound - d.lowerBound >= 0.8)
     }
 }

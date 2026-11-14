@@ -3,6 +3,7 @@ import Observation
 import SwiftData
 import UIKit
 import UserNotifications
+import os
 
 /// The heart of the app: watches the sensor, writes a reading every interval
 /// tagged with the place the sensor is in, and rings the fūrin when CO₂
@@ -68,6 +69,7 @@ final class Recorder {
     @ObservationIgnored private var alertGate = AlertGate()
     @ObservationIgnored private var lastRefreshAt: Date?
     @ObservationIgnored private var reach = ReachJudge()
+    @ObservationIgnored private let reachLog = Logger(subsystem: "com.olshanskysoft.kuki", category: "reach")
     @ObservationIgnored private var recheck: Task<Void, Never>?
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let clock: () -> Date
@@ -171,6 +173,7 @@ final class Recorder {
         guard context == nil else { return }
         context = container.mainContext
         seedPlacesIfNeeded()
+        ensureCurrentPlace()
     }
 
     func start(container: ModelContainer) {
@@ -207,10 +210,11 @@ final class Recorder {
         let now = clock()
         if useDemo {
             demo.step(now: now)
-        } else if lastRefreshAt.map({ now.timeIntervalSince($0) >= 60 }) ?? true {
+        } else if Self.mayReadHomeKit, lastRefreshAt.map({ now.timeIntervalSince($0) >= 60 }) ?? true {
             // Ask once a minute even if notifications are quiet: a successful
             // read is what keeps the values counted as fresh.
             lastRefreshAt = now
+            DebugLog.write("tick", "refresh (app \(Self.appStateName))")
             await homeKit.refresh()
         }
         updateStaleness()
@@ -224,12 +228,40 @@ final class Recorder {
         }
     }
 
+    /// Not out of reach — Apple Home simply won't talk to a background app.
+    var isPausedInBackground: Bool { !useDemo && homeKit.refusedInBackground }
+
+    /// iOS refuses HomeKit reads from a background app ("Missing entitlement
+    /// for API"), so don't ask then — the app reads again the moment it's in
+    /// front (`appBecameActive`). The Mac app keeps reading in the background.
+    static var mayReadHomeKit: Bool {
+        #if targetEnvironment(macCatalyst)
+        true
+        #else
+        UIApplication.shared.applicationState != .background
+        #endif
+    }
+
+    static var appStateName: String {
+        switch UIApplication.shared.applicationState {
+        case .active: "active"
+        case .inactive: "inactive"
+        case .background: "background"
+        @unknown default: "?"
+        }
+    }
+
     func updateStaleness() {
         let now = clock()
         let raw = current.map { $0.isStale(now: now) } ?? false
         let state = reach.evaluate(rawStale: raw, now: now)
         let out = state == .outOfReach
         let catching = state == .catchingUp
+        if out != isSensorStale || catching != isCatchingUp {
+            let age = current?.lastHeard.map { Int(now.timeIntervalSince($0)) } ?? -1
+            reachLog.notice("state → \(String(describing: state), privacy: .public) (raw stale: \(raw), last heard \(age) s ago)")
+            DebugLog.write("reach", "state → \(state) (raw stale: \(raw), last heard \(age) s ago, app: \(Self.appStateName))")
+        }
         if out != isSensorStale { isSensorStale = out }
         if catching != isCatchingUp { isCatchingUp = catching }
         // Decide promptly when the grace runs out, not at the next tick.
@@ -249,6 +281,9 @@ final class Recorder {
     func appBecameActive() {
         guard context != nil, !useDemo else { return }
         reach.appResumed(at: clock())
+        let age = current?.lastHeard.map { Int(clock().timeIntervalSince($0)) } ?? -1
+        reachLog.notice("app active — last heard \(age) s ago; asking Apple Home now")
+        DebugLog.write("reach", "app active — last heard \(age) s ago; asking Apple Home now")
         updateStaleness()
         lastRefreshAt = clock()
         Task { [weak self] in
@@ -301,7 +336,9 @@ final class Recorder {
     }
 
     private func seedPlacesIfNeeded() {
-        guard let context, !defaults.bool(forKey: Keys.seeded) else { return }
+        // Seed whenever the store has no places at all — a fresh install, or
+        // a new store location — not only on the very first launch.
+        guard let context, ((try? context.fetchCount(FetchDescriptor<Place>())) ?? 0) == 0 else { return }
         for (i, item) in Place.defaults.enumerated() {
             context.insert(Place(name: item.0, kanji: item.1, sortIndex: i))
         }
@@ -311,6 +348,16 @@ final class Recorder {
             currentPlaceID = first.id
             placeChangedAt = .distantPast
         }
+    }
+
+    /// The sensor is always *somewhere*: if no place is chosen (fresh store,
+    /// or the chosen one was deleted), start with the first place.
+    private func ensureCurrentPlace() {
+        guard let context, currentPlace() == nil,
+              let first = try? context.fetch(FetchDescriptor<Place>(sortBy: [SortDescriptor(\.sortIndex)])).first
+        else { return }
+        currentPlaceID = first.id
+        placeChangedAt = .distantPast
     }
 
     func seedDemoHistory() {
@@ -360,12 +407,18 @@ final class Recorder {
         let place = currentPlace()?.name ?? "The room"
         content.title = "\(place): \(Metric.co2.format(co2)) ppm CO₂"
         content.body = "Time to open a window for a few minutes."
-        content.sound = .default
+        // The app rings the fūrin itself when the sound is on; the banner
+        // then stays silent so the bell never sounds twice.
+        content.sound = Furin.notificationSound(appRings: soundOn)
         let request = UNNotificationRequest(identifier: "co2-high", content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
     }
 
     // MARK: Station mode
+
+    /// Keeps the system *and the display* awake while the station shows.
+    nonisolated static let stationActivityOptions: ProcessInfo.ActivityOptions =
+        [.userInitiated, .idleSystemSleepDisabled, .idleDisplaySleepDisabled]
 
     /// Keep the phone (or Mac) awake so recording never stops while you leave
     /// it in a room for hours.
@@ -373,13 +426,18 @@ final class Recorder {
         UIApplication.shared.isIdleTimerDisabled = stationMode
         #if targetEnvironment(macCatalyst)
         if stationMode, stationActivity == nil {
+            // The display too, not just the system: a station is something
+            // you look at.
             stationActivity = ProcessInfo.processInfo.beginActivity(
-                options: [.userInitiated, .idleSystemSleepDisabled],
+                options: Self.stationActivityOptions,
                 reason: "Recording air quality in Station Mode")
         } else if !stationMode, let activity = stationActivity {
             ProcessInfo.processInfo.endActivity(activity)
             stationActivity = nil
         }
+        // HIG › Going full screen: use the system's full screen, not a
+        // window-sized cover.
+        MenuBarBridge.shared.setFullScreen(stationMode)
         #endif
     }
 }
@@ -391,6 +449,6 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
 
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        [.banner, .sound]
+        Furin.presentationOptions(appRings: UserDefaults.standard.bool(forKey: "soundOn"))
     }
 }

@@ -2,6 +2,7 @@ import SwiftUI
 
 /// 設定 — the few things worth choosing.
 struct SettingsView: View {
+    @State private var cloudSyncOn = CloudSync.userWantsSync
     @Environment(Recorder.self) private var recorder
     @State private var confirmDelete = false
 
@@ -17,16 +18,16 @@ struct SettingsView: View {
         @Bindable var r = recorder
         NavigationStack {
             Form {
+                #if !targetEnvironment(macCatalyst)
+                // On the Mac the window's own title ("Kūki Settings") is the
+                // title (HIG › Settings) — no second one inside it.
                 Section {
                 } header: {
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text("設定").font(Typeface.mincho(24)).foregroundStyle(Ink.inkSoft)
-                        Text("Settings").font(.system(.largeTitle).weight(.ultraLight)).foregroundStyle(Ink.ink)
-                    }
-                    .textCase(nil)
-                    .padding(.top, 12)
-                    .accessibilityAddTraits(.isHeader)
+                    PageTitle(kanji: "設定", title: "Settings")
+                        .textCase(nil)
+                        .padding(.top, 12)
                 }
+                #endif
 
                 Section {
                     if recorder.homeKit.sensors.isEmpty {
@@ -100,6 +101,23 @@ struct SettingsView: View {
                     Text("Recording")
                 }
 
+                if CloudSync.isAvailable {
+                    Section {
+                        Toggle("iCloud Sync", isOn: Binding(
+                            get: { cloudSyncOn },
+                            set: { on in
+                                cloudSyncOn = on
+                                CloudSync.userWantsSync = on
+                                if on { Task { await CloudSync.ensureSubscription() } }
+                            }
+                        ))
+                    } header: {
+                        Text("iCloud")
+                    } footer: {
+                        Text("Shares only the latest reading, through your private iCloud, so your iPhone's widget, Lock Screen and alerts can follow a Mac that records around the clock. Your history stays on each device.")
+                    }
+                }
+
                 Section {
                     if recorder.useDemo {
                         Button("Add 3 days of demo history") { recorder.seedDemoHistory() }
@@ -110,6 +128,7 @@ struct SettingsView: View {
                     Text("Data")
                 }
             }
+            .formStyle(.grouped)
             .scrollContentBackground(.hidden)
             .background(Ink.paper)
             .toolbar(.hidden, for: .navigationBar)

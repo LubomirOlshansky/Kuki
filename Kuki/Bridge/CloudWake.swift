@@ -72,7 +72,8 @@ enum CloudWake {
         let place = s.placeName.isEmpty ? "The room" : s.placeName
         content.title = "\(place): \(Metric.co2.format(co2)) ppm CO₂"
         content.body = "Time to open a window for a few minutes."
-        content.sound = .default
+        // The app isn't running to ring the bell: the banner carries it.
+        content.sound = Furin.notificationSound(appRings: false)
         content.threadIdentifier = "co2"
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: "co2-high-cloud", content: content, trigger: nil))

@@ -1,5 +1,6 @@
 import AVFoundation
 import UIKit
+import UserNotifications
 
 /// A fūrin (風鈴) — the glass wind bell hung in Japanese windows in summer.
 /// Synthesised, not sampled: two soft strikes of a bell-like tone that rings
@@ -88,5 +89,21 @@ final class Chime {
             for i in 0..<Int(frames) { data[i] *= gain }
         }
         return buffer
+    }
+}
+
+/// The fūrin as a notification sound: the same two strikes, rendered once
+/// into the bundled `furin.caf` (16-bit PCM, 4 s — well under the 30 s limit).
+enum Furin {
+    static let fileName = "furin.caf"
+
+    /// Silent when the app rings the bell itself; the fūrin otherwise.
+    static func notificationSound(appRings: Bool) -> UNNotificationSound? {
+        appRings ? nil : UNNotificationSound(named: UNNotificationSoundName(fileName))
+    }
+
+    /// In front, the app has already rung the bell when the sound is on.
+    static func presentationOptions(appRings: Bool) -> UNNotificationPresentationOptions {
+        appRings ? [.banner] : [.banner, .sound]
     }
 }

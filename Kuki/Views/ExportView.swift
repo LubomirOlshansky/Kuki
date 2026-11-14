@@ -13,11 +13,8 @@ struct ExportView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text("書出").font(Typeface.mincho(24)).foregroundStyle(Ink.inkSoft)
-                    Text("Export").font(.system(.largeTitle).weight(.ultraLight)).foregroundStyle(Ink.ink)
-                }
-                .padding(.top, 12)
+                PageTitle(kanji: "書出", title: "Export")
+                    .padding(.top, 12)
 
                 Picker("Period", selection: $range) {
                     ForEach(ExportRange.allCases) { Text($0.title).tag($0) }
@@ -34,11 +31,13 @@ struct ExportView: View {
                         ShareLink(item: file(.markdown), preview: SharePreview("Kūki air log (Markdown)")) {
                             pill("Share file", systemImage: "doc.text")
                         }
+                        .help("Share the Markdown brief as a file")
                         Button(action: copyMarkdown) {
                             pill(copied ? "Copied" : "Copy text", systemImage: copied ? "checkmark" : "doc.on.doc")
                         }
                         .buttonStyle(QuietButtonStyle())
                         .disabled(copying)
+                        .help("Copy the Markdown brief, to paste into a chat")
                     }
                 }
 
@@ -51,6 +50,7 @@ struct ExportView: View {
                     ShareLink(item: file(.csv), preview: SharePreview("Kūki air log (CSV)")) {
                         pill("Share CSV", systemImage: "tablecells")
                     }
+                    .help("Share every sample as a CSV file")
                 }
             }
             .padding(.horizontal, 28)
@@ -62,7 +62,7 @@ struct ExportView: View {
     }
 
     private func file(_ kind: ExportFile.Kind) -> ExportFile {
-        ExportFile(kind: kind, range: range, limit: recorder.co2Limit, sensor: recorder.sensorName,
+        ExportFile(kind: kind, since: range.start, limit: recorder.co2Limit, sensor: recorder.sensorName,
                    filter: recorder.sensorFilter, container: context.container)
     }
 
@@ -103,6 +103,7 @@ struct ExportView: View {
             .padding(.vertical, 10)
             .overlay(Capsule().stroke(Ink.hairline, lineWidth: 1))
             .contentShape(Capsule())
+            .quietHover(Capsule())
     }
 }
 
@@ -130,9 +131,10 @@ private struct ExportCount: View {
             let (range, filter) = (range, filter)
             while !Task.isCancelled {
                 let since = range.start
+                // A count, not the rows: 30 days at one a minute is 43 000 of them.
                 let result = await Task.detached(priority: .utility) { () -> (Int, Int) in
-                    let rows = (try? Exporter.fetchRows(container: container, since: since, filter: filter)) ?? []
-                    return (rows.count, Set(rows.map(\.placeKey)).count)
+                    let counts = (try? Exporter.counts(container: container, since: since, filter: filter)) ?? (samples: 0, places: 0)
+                    return (counts.samples, counts.places)
                 }.value
                 if Task.isCancelled { break }
                 counts = result

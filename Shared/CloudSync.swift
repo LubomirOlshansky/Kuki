@@ -23,10 +23,25 @@ enum CloudSync {
         return raw
     }
 
-    static var isEnabled: Bool { containerID != nil }
+    /// The user's switch (Settings › iCloud Sync), stored in the App Group so
+    /// the widget extension honours it too. On by default.
+    static let userSwitchKey = "cloudSyncOn"
+    static var sharedDefaults: UserDefaults? { UserDefaults(suiteName: WidgetSnapshot.appGroup) }
+
+    static var userWantsSync: Bool {
+        get { sharedDefaults?.object(forKey: userSwitchKey) as? Bool ?? true }
+        set { sharedDefaults?.set(newValue, forKey: userSwitchKey) }
+    }
+
+    /// Built with iCloud *and* switched on by the user.
+    static var isEnabled: Bool { containerID != nil && userWantsSync }
+    /// Whether this build can sync at all (to show the switch).
+    static var isAvailable: Bool { containerID != nil }
 
     private static var database: CKDatabase? {
-        containerID.map { CKContainer(identifier: $0).privateCloudDatabase }
+        // nil when switched off: publish, fetch and subscribe all stand down.
+        guard userWantsSync else { return nil }
+        return containerID.map { CKContainer(identifier: $0).privateCloudDatabase }
     }
 
     /// Upload the snapshot, replacing whatever was there. Errors are logged

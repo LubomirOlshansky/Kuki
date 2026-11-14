@@ -8,11 +8,12 @@ enum Ink {
     static let paper     = dynamic(light: 0xF3EFE6, dark: 0x121211)
     static let paperRaised = dynamic(light: 0xEBE6DB, dark: 0x1B1B19)
     static let ink       = dynamic(light: 0x22211F, dark: 0xE9E4D8)
-    /// Secondary text. 68 % ink: 5.2:1 on washi, 7.3:1 at night (≥ 4.5:1 for small text).
-    static let inkSoft   = dynamic(light: 0x22211F, dark: 0xE9E4D8, alpha: 0.68)
+    /// Secondary text. 68 % ink: 5.2:1 on washi, 7.3:1 at night (≥ 4.5:1 for small text);
+    /// 85 % with Increase Contrast.
+    static let inkSoft   = dynamic(light: 0x22211F, dark: 0xE9E4D8, alpha: 0.68, highContrastAlpha: 0.85)
     /// Decoration only (rules, tracks, redundant kanji) — never the sole carrier of text.
-    static let inkFaint  = dynamic(light: 0x22211F, dark: 0xE9E4D8, alpha: 0.30)
-    static let hairline  = dynamic(light: 0x22211F, dark: 0xE9E4D8, alpha: 0.12)
+    static let inkFaint  = dynamic(light: 0x22211F, dark: 0xE9E4D8, alpha: 0.30, highContrastAlpha: 0.55)
+    static let hairline  = dynamic(light: 0x22211F, dark: 0xE9E4D8, alpha: 0.12, highContrastAlpha: 0.30)
 
     static let matcha    = dynamic(light: 0x5F7D4C, dark: 0x93B27B)
     static let kincha    = dynamic(light: 0xA97A2C, dark: 0xD5A95A)
@@ -31,14 +32,18 @@ enum Ink {
         dynamic(light: 0x5E5D59, dark: 0xA9A8A2), // nezumi, mouse grey
     ]
 
-    private static func dynamic(light: UInt32, dark: UInt32, alpha: CGFloat = 1) -> Color {
+    /// A colour that follows light/dark — and, through `highContrastAlpha`,
+    /// the Increase Contrast setting, where the quiet greys step forward.
+    private static func dynamic(light: UInt32, dark: UInt32, alpha: CGFloat = 1,
+                                highContrastAlpha: CGFloat? = nil) -> Color {
         Color(UIColor { traits in
             let hex = traits.userInterfaceStyle == .dark ? dark : light
+            let a = traits.accessibilityContrast == .high ? (highContrastAlpha ?? alpha) : alpha
             return UIColor(
                 red: CGFloat((hex >> 16) & 0xFF) / 255,
                 green: CGFloat((hex >> 8) & 0xFF) / 255,
                 blue: CGFloat(hex & 0xFF) / 255,
-                alpha: alpha
+                alpha: a
             )
         })
     }
@@ -50,9 +55,17 @@ enum Typeface {
         .custom("HiraMinProN-W3", size: size, relativeTo: .body)
     }
 
-    /// The big reading. Ultralight, monospaced digits so it never jitters.
-    static func numeral(_ size: CGFloat) -> Font {
-        .system(size: size, weight: .ultraLight, design: .default).monospacedDigit()
+    /// The big reading. Ultralight — kept only for this display size (64 pt
+    /// and up) — and one step heavier with Bold Text. Monospaced digits so it
+    /// never jitters.
+    static func numeral(_ size: CGFloat, bold: Bool = false) -> Font {
+        .system(size: size, weight: bold ? .regular : .ultraLight, design: .default).monospacedDigit()
+    }
+
+    /// Page titles: light at large-title size (HIG: avoid the thinnest
+    /// weights), regular with Bold Text.
+    static func pageTitle(bold: Bool = false) -> Font {
+        .system(.largeTitle).weight(bold ? .regular : .light)
     }
 
     static let label = Font.system(.caption, design: .default).weight(.regular)

@@ -36,6 +36,10 @@ final class HomeKitSource: NSObject {
 
     @ObservationIgnored private var manager: HMHomeManager?
     @ObservationIgnored private var accessories: [UUID: HMAccessory] = [:]
+    /// Apple Home answers only the app in front (on iPhone *and* Mac); in the
+    /// background reads fail with "Missing entitlement for API" and no updates
+    /// arrive. True from such a refusal until the next successful read.
+    private(set) var refusedInBackground = false
     @ObservationIgnored private let log = Logger(subsystem: "com.olshanskysoft.kuki", category: "HomeKit")
 
     private static let co2Type = HMCharacteristicTypeCarbonDioxideLevel
@@ -58,13 +62,26 @@ final class HomeKitSource: NSObject {
     /// Only a successful read counts as hearing from the sensor; a failed one
     /// leaves the old value (and its old date) alone.
     func refresh() async {
+        let started = Date.now
+        var ok = 0, failed = 0
+        defer {
+            log.notice("refresh: \(ok) read, \(failed) failed, \(Int(Date.now.timeIntervalSince(started) * 1000)) ms")
+            DebugLog.write("HomeKit", "refresh: \(ok) read, \(failed) failed, \(Int(Date.now.timeIntervalSince(started) * 1000)) ms")
+        }
         for accessory in accessories.values where accessory.isReachable {
             for characteristic in relevantCharacteristics(of: accessory) {
                 do {
                     try await characteristic.readValue()
                     apply(characteristic, of: accessory, heard: true)
+                    ok += 1
+                    if refusedInBackground { refusedInBackground = false }
                 } catch {
+                    failed += 1
+                    if error.localizedDescription.localizedCaseInsensitiveContains("entitlement"), !refusedInBackground {
+                        refusedInBackground = true
+                    }
                     log.error("Reading \(characteristic.localizedDescription, privacy: .public) from \(accessory.name, privacy: .private) failed: \(error.localizedDescription, privacy: .public)")
+                    DebugLog.write("HomeKit", "read failed: \(error.localizedDescription)")
                 }
             }
         }
@@ -167,6 +184,8 @@ final class HomeKitSource: NSObject {
         if heard {
             snapshot.heardAt[metric] = .now
             snapshot.isReachable = true
+            log.info("heard \(metric.rawValue, privacy: .public) = \(number.doubleValue, privacy: .public)")
+            if metric == .co2 { DebugLog.write("HomeKit", "heard co2 = \(Int(number.doubleValue))") }
         }
         snapshots[id] = snapshot
         onChange?()
@@ -203,6 +222,11 @@ extension HomeKitSource: HMAccessoryDelegate {
     }
 
     nonisolated func accessoryDidUpdateReachability(_ accessory: HMAccessory) {
-        Task { @MainActor in self.rescan() }
+        let reachable = accessory.isReachable
+        Task { @MainActor in
+            self.log.notice("reachability → \(reachable ? "reachable" : "UNREACHABLE", privacy: .public)")
+            DebugLog.write("HomeKit", "reachability → \(reachable ? "reachable" : "UNREACHABLE")")
+            self.rescan()
+        }
     }
 }

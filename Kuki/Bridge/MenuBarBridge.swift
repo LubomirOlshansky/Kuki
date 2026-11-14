@@ -14,6 +14,9 @@ import UIKit
                 details: [String], placeNames: [String], placeIDs: [String], currentPlaceID: String)
     func setVisible(_ visible: Bool)
     func setActionHandler(_ handler: @escaping (String) -> Void)
+    /// Station Mode on the Mac: take the main window into (or out of) the
+    /// system's full screen.
+    func setFullScreen(_ on: Bool)
 }
 
 /// Loads the AppKit menu bar bundle and keeps it in step with the recorder.
@@ -57,8 +60,11 @@ final class MenuBarBridge {
         guard let bar, let recorder else { return }
         let snapshot = recorder.current
         let stale = recorder.isSensorStale
+        let paused = stale && recorder.isPausedInBackground
         // Out of reach: dashes, no alert mark — an old number would lie.
+        // Paused in the background: the last numbers, dimmed (alert -1).
         let live = stale ? nil : snapshot
+        let shownSnapshot = paused ? snapshot : live
         let co2 = live?.co2
         let alert: Int = co2.map { ppm in
             switch CO2Level(ppm: ppm) {
@@ -70,7 +76,12 @@ final class MenuBarBridge {
         let shown = recorder.menuBarMetrics.isEmpty ? [Metric.co2] : recorder.menuBarMetrics
 
         var details: [String] = []
-        if stale {
+        if paused {
+            let time = snapshot?.lastHeard?.formatted(date: .omitted, time: .shortened) ?? "—"
+            details.append("Paused · last reading \(time)")
+            details.append("Apple Home only updates Kūki while it's the front app.")
+            details.append("Open Kūki, or use Station Mode to keep recording.")
+        } else if stale {
             if let heard = snapshot?.lastHeard {
                 details.append("Sensor out of reach · last \(heard.formatted(date: .omitted, time: .shortened))")
             } else {
@@ -97,15 +108,23 @@ final class MenuBarBridge {
         bar.setVisible(recorder.showInMenuBar)
         bar.update(
             symbols: shown.map(\.symbol),
-            values: shown.map { m in live.map { m.compact(m.value(of: $0)) } ?? "—" },
-            labels: shown.map { m in stale ? "\(m.title) unavailable, sensor out of reach" : m.spoken(live.flatMap { m.value(of: $0) }) },
-            alert: alert,
+            values: shown.map { m in shownSnapshot.map { m.compact(m.value(of: $0)) } ?? "—" },
+            labels: shown.map { m in
+                paused ? "\(m.spoken(snapshot.flatMap { m.value(of: $0) })), paused while Kūki is in the background"
+                    : stale ? "\(m.title) unavailable, sensor out of reach" : m.spoken(live.flatMap { m.value(of: $0) })
+            },
+            alert: paused ? -1 : alert,
             header: current.map { "Sensor in \($0.name)" } ?? "Kūki",
             details: details,
             placeNames: places.map(\.name),
             placeIDs: places.map(\.id.uuidString),
             currentPlaceID: recorder.currentPlaceID?.uuidString ?? ""
         )
+    }
+
+    /// Station Mode enters and leaves the system's full screen with it.
+    func setFullScreen(_ on: Bool) {
+        bar?.setFullScreen(on)
     }
 
     /// Call after places are added/renamed so the submenu catches up.
@@ -125,6 +144,8 @@ final class MenuBarBridge {
         case "station":
             showWindow()
             recorder.stationMode = true
+        case "settings":
+            WindowRouter.shared.show(WindowID.settings, using: WindowRouter.shared.openWindow)
         default:
             break
         }

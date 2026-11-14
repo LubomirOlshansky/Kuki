@@ -57,11 +57,16 @@ struct KukiApp: App {
 
 enum AppTab: Hashable { case now, history, export, settings }
 
-/// Which section is showing — shared so menu commands can switch it.
+/// Which section is showing, and what History is looking at — shared so
+/// menu commands can switch it and File › Export can follow the chart.
 @MainActor
 @Observable
 final class AppNav {
     var tab: AppTab = .now
+    var historyRange: ChartRange = .day
+    var historyMetric: Metric = .co2
+    /// A File › Export request waiting for its save panel (Mac).
+    var exportRequest: ExportFile.Kind?
 }
 
 struct RootView: View {
@@ -74,29 +79,80 @@ struct RootView: View {
     var body: some View {
         @Bindable var recorder = recorder
         @Bindable var nav = nav
+        // Symbols that all have filled forms, so the tab bar shows one family.
+        // On the Mac, Export lives in the File menu and Settings in its own
+        // window: the window keeps just Now and History.
         TabView(selection: $nav.tab) {
-            Tab("Now", systemImage: "circle.dotted", value: AppTab.now) { NowView() }
-            Tab("History", systemImage: "chart.xyaxis.line", value: AppTab.history) { HistoryView() }
-            Tab("Export", systemImage: "square.and.arrow.up", value: AppTab.export) { ExportView() }
+            Tab("Now", systemImage: "circle.dotted.circle", value: AppTab.now) { NowView() }
+            Tab("History", systemImage: "chart.line.text.clipboard", value: AppTab.history) { HistoryView() }
             #if !targetEnvironment(macCatalyst)
+            Tab("Export", systemImage: "square.and.arrow.up", value: AppTab.export) { ExportView() }
             Tab("Settings", systemImage: "gearshape", value: AppTab.settings) { SettingsView() }
             #endif
         }
-        .tabViewStyle(.sidebarAdaptable)
+        // Three or four destinations don't need a sidebar (or its toggle).
+        .tabViewStyle(.tabBarOnly)
         .tint(Ink.ink)
         // Hand the environment over explicitly: on Mac Catalyst a full-screen
         // cover is hosted outside this view tree and doesn't inherit it.
+        #if targetEnvironment(macCatalyst)
+        // Settings lives in the app menu (⌘,), but a quiet gear in the window
+        // corner makes it findable without knowing that.
+        .overlay(alignment: .topTrailing) {
+            Button {
+                WindowRouter.shared.show(WindowID.settings, using: openWindow)
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(Ink.inkSoft)
+                    .frame(width: 30, height: 30)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(QuietButtonStyle())
+            .help("Settings (⌘,)")
+            .accessibilityLabel("Settings")
+            .padding(.top, 10)
+            .padding(.trailing, 14)
+        }
+        #endif
         .fullScreenCover(isPresented: $recorder.stationMode) {
             StationView()
                 .environment(recorder)
                 .environment(nav)
                 .environment(\.modelContext, modelContext)
         }
-        .background(SceneReader { WindowRouter.shared.register($0, as: WindowID.main) })
+        .fileExporter(isPresented: Binding(get: { nav.exportRequest != nil },
+                                           set: { if !$0 { nav.exportRequest = nil } }),
+                      item: exportFile,
+                      contentTypes: exportFile.map { [$0.contentType] } ?? [],
+                      defaultFilename: exportFile.map { Exporter.fileName($0.fileExtension) }) { _ in
+            nav.exportRequest = nil
+        } onCancellation: {
+            nav.exportRequest = nil
+        }
+        .background(SceneReader { scene in
+            WindowRouter.shared.register(scene, as: WindowID.main)
+            #if targetEnvironment(macCatalyst)
+            // The washi runs up to the traffic lights: no title text (the
+            // window *is* Kūki), a unified bar for the tabs, and a minimum
+            // size the two-column layout still fits in.
+            scene.titlebar?.titleVisibility = .hidden
+            scene.titlebar?.toolbarStyle = .unified
+            scene.sizeRestrictions?.minimumSize = CGSize(width: 560, height: 620)
+            #endif
+        })
         .onAppear { WindowRouter.shared.openWindow = openWindow }
         .onChange(of: scenePhase) { _, phase in
+            DebugLog.write("scene", "phase → \(phase)")
             if phase == .active { recorder.appBecameActive() }
         }
+    }
+
+    /// What File › Export… writes: the period History is showing.
+    private var exportFile: ExportFile? {
+        guard let kind = nav.exportRequest else { return nil }
+        return ExportFile(kind: kind, since: nav.historyRange.start, limit: recorder.co2Limit,
+                          sensor: recorder.sensorName, filter: recorder.sensorFilter, container: modelContext.container)
     }
 }
 
@@ -119,7 +175,7 @@ private struct SettingsWindow: View {
 #endif
 
 /// Every action is reachable from the Mac menu bar, with standard shortcuts
-/// where they exist (HIG › The menu bar). ⌘1–⌘3 follow the sidebar order.
+/// where they exist (HIG › The menu bar). ⌘1… follow the tab order.
 struct KukiCommands: Commands {
     let recorder: Recorder
     let nav: AppNav
@@ -131,10 +187,25 @@ struct KukiCommands: Commands {
             Button("Settings…") { openSettings() }
                 .keyboardShortcut(",")
         }
+        // One main window by design: a second one would share its tab and
+        // Station Mode with the first.
+        CommandGroup(replacing: .newItem) {}
+        #if targetEnvironment(macCatalyst)
+        // HIG › The menu bar: exporting belongs in the File menu. Both follow
+        // the period History is showing.
+        CommandGroup(replacing: .importExport) {
+            Button("Export CSV…") { requestExport(.csv) }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+            Button("Export for AI…") { requestExport(.markdown) }
+                .keyboardShortcut("e", modifiers: [.command, .shift, .option])
+        }
+        #endif
         CommandMenu("Air") {
             Button("Now") { show(.now) }.keyboardShortcut("1")
             Button("History") { show(.history) }.keyboardShortcut("2")
+            #if !targetEnvironment(macCatalyst)
             Button("Export") { show(.export) }.keyboardShortcut("3")
+            #endif
             Divider()
             PlaceCommands(recorder: recorder).modelContainer(container)
             Divider()
@@ -155,6 +226,11 @@ struct KukiCommands: Commands {
     private func show(_ tab: AppTab) {
         nav.tab = tab
         WindowRouter.shared.show(WindowID.main, using: openWindow)
+    }
+
+    private func requestExport(_ kind: ExportFile.Kind) {
+        WindowRouter.shared.show(WindowID.main, using: openWindow)
+        nav.exportRequest = kind
     }
 
     private func openSettings() {

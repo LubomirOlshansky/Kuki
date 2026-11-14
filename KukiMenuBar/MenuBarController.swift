@@ -11,6 +11,9 @@ import AppKit
                 details: [String], placeNames: [String], placeIDs: [String], currentPlaceID: String)
     func setVisible(_ visible: Bool)
     func setActionHandler(_ handler: @escaping (String) -> Void)
+    /// Station Mode on the Mac: take the main window into (or out of) the
+    /// system's full screen.
+    func setFullScreen(_ on: Bool)
 }
 
 /// The AppKit half of Kūki. A Mac Catalyst app can't create a menu bar item
@@ -66,6 +69,36 @@ public final class MenuBarController: NSObject, KukiStatusBar, NSMenuDelegate {
                             placeIDs: placeIDs, currentPlaceID: currentPlaceID)
     }
 
+    // MARK: Full screen
+
+    /// Whether *we* took the window full screen — so leaving Station Mode
+    /// never pulls a window out of a full screen the person chose.
+    private weak var stationWindow: NSWindow?
+
+    public func setFullScreen(_ on: Bool) {
+        // Give the window a moment to come forward and the cover to present.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            guard let self else { return }
+            if on {
+                guard let window = Self.mainWindow(), !window.styleMask.contains(.fullScreen) else { return }
+                self.stationWindow = window
+                window.toggleFullScreen(nil)
+            } else if let window = self.stationWindow {
+                self.stationWindow = nil
+                if window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
+            }
+        }
+    }
+
+    /// The app's main window: the key one if it can go full screen (the
+    /// fixed-size Settings window can't), else any visible one that can.
+    private static func mainWindow() -> NSWindow? {
+        let candidates = NSApp.windows.filter {
+            $0.isVisible && $0.collectionBehavior.contains(.fullScreenPrimary) && $0.styleMask.contains(.titled)
+        }
+        return candidates.first { $0.isKeyWindow } ?? candidates.first { $0.isMainWindow } ?? candidates.first
+    }
+
     // MARK: Menu
 
     public func menuNeedsUpdate(_ menu: NSMenu) {
@@ -100,6 +133,7 @@ public final class MenuBarController: NSObject, KukiStatusBar, NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(action("Open Kūki", "open", key: "o"))
         menu.addItem(action("Station Mode", "station", key: ""))
+        menu.addItem(action("Settings…", "settings", key: ","))
         menu.addItem(.separator())
         menu.addItem(action("Quit Kūki", "quit", key: "q"))
     }
@@ -116,7 +150,7 @@ public final class MenuBarController: NSObject, KukiStatusBar, NSMenuDelegate {
         switch id {
         case "quit":
             NSApp.terminate(nil)
-        case "open", "station":
+        case "open", "station", "settings":
             NSApp.activate()
             handler?(id)
         default:
@@ -161,9 +195,12 @@ public final class MenuBarController: NSObject, KukiStatusBar, NSMenuDelegate {
                 text.append(NSAttributedString(attachment: attachment))
                 text.append(NSAttributedString(string: " "))
             }
-            text.append(NSAttributedString(string: value, attributes: [
+            // alert -1: paused (Kūki in the background) — the last value, dimmed.
+            var attributes: [NSAttributedString.Key: Any] = [
                 .font: NSFont.monospacedDigitSystemFont(ofSize: size, weight: .regular),
-            ]))
+            ]
+            if new.alert < 0 { attributes[.foregroundColor] = NSColor.tertiaryLabelColor }
+            text.append(NSAttributedString(string: value, attributes: attributes))
         }
         button.image = nil
         button.attributedTitle = text

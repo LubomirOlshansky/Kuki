@@ -10,6 +10,7 @@ struct PlaceSheet: View {
 
     @State private var newName = ""
     @State private var renaming: Place?
+    @State private var showingRename = false
     @State private var renameText = ""
 
     var body: some View {
@@ -42,12 +43,12 @@ struct PlaceSheet: View {
                         .buttonStyle(QuietButtonStyle())
                         .accessibilityAddTraits(place.id == recorder.currentPlaceID ? .isSelected : [])
                         .contextMenu {
-                            Button("Rename") { renameText = place.name; renaming = place }
+                            Button("Rename") { rename(place) }
                             Button("Delete", role: .destructive) { delete(place) }
                         }
                         .swipeActions {
                             Button("Delete", role: .destructive) { delete(place) }
-                            Button("Rename") { renameText = place.name; renaming = place }
+                            Button("Rename") { rename(place) }
                         }
                     }
                 } header: {
@@ -72,11 +73,11 @@ struct PlaceSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
-            .alert("Rename place", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            .alert("Rename place", isPresented: $showingRename, presenting: renaming) { place in
                 TextField("Name", text: $renameText)
                 Button("Save") {
                     let name = renameText.trimmingCharacters(in: .whitespaces)
-                    if let place = renaming, !name.isEmpty { place.name = name; try? context.save() }
+                    if !name.isEmpty { place.name = name; try? context.save() }
                     renaming = nil
                 }
                 Button("Cancel", role: .cancel) { renaming = nil }
@@ -84,6 +85,12 @@ struct PlaceSheet: View {
         }
         .presentationDetents([.medium, .large])
         .frame(minWidth: 380, minHeight: 440)
+    }
+
+    private func rename(_ place: Place) {
+        renameText = place.name
+        renaming = place
+        showingRename = true
     }
 
     private func add() {

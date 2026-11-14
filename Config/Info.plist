@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>KukiCloudContainer</key>
+	<string>$(KUKI_CLOUD_CONTAINER)</string>
+	<key>NSHomeKitUsageDescription</key>
+	<string>Kūki reads the CO₂, temperature, humidity and particle levels from your air quality sensor in Apple Home.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+</dict>
+</plist>

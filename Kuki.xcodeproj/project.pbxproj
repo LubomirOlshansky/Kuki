@@ -1,0 +1,699 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A2000000000000000000A101 /* KukiMenuBar.bundle in Embed PlugIns */ = {isa = PBXBuildFile; fileRef = A2000000000000000000A001 /* KukiMenuBar.bundle */; platformFilter = maccatalyst; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		A5000000000000000000A101 /* KukiWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A5000000000000000000A001 /* KukiWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A2000000000000000000A201 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1000000000000000000F000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A2000000000000000000E001;
+			remoteInfo = KukiMenuBar;
+		};
+		A3000000000000000000A201 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1000000000000000000F000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1000000000000000000E001;
+			remoteInfo = Kuki;
+		};
+		A5000000000000000000A201 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1000000000000000000F000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A5000000000000000000E001;
+			remoteInfo = KukiWidgetExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A2000000000000000000A301 /* Embed PlugIns */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A2000000000000000000A101 /* KukiMenuBar.bundle in Embed PlugIns */,
+			);
+			name = "Embed PlugIns";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A5000000000000000000A301 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A5000000000000000000A101 /* KukiWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		A1000000000000000000A001 /* Kuki.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kuki.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A2000000000000000000A001 /* KukiMenuBar.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KukiMenuBar.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		A3000000000000000000A001 /* KukiTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KukiTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A5000000000000000000A001 /* KukiWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = KukiWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		A1000000000000000000B001 /* Kuki */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Kuki;
+			sourceTree = "<group>";
+		};
+		A2000000000000000000B001 /* KukiMenuBar */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = KukiMenuBar;
+			sourceTree = "<group>";
+		};
+		A3000000000000000000B001 /* KukiTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = KukiTests;
+			sourceTree = "<group>";
+		};
+		A4000000000000000000B001 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		A5000000000000000000B001 /* KukiWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = KukiWidget;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A1000000000000000000C001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A2000000000000000000C001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A3000000000000000000C001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A5000000000000000000C001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A1000000000000000000D001 = {
+			isa = PBXGroup;
+			children = (
+				A1000000000000000000B001 /* Kuki */,
+				A4000000000000000000B001 /* Shared */,
+				A5000000000000000000B001 /* KukiWidget */,
+				A2000000000000000000B001 /* KukiMenuBar */,
+				A3000000000000000000B001 /* KukiTests */,
+				A1000000000000000000D002 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A1000000000000000000D002 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A1000000000000000000A001 /* Kuki.app */,
+				A2000000000000000000A001 /* KukiMenuBar.bundle */,
+				A3000000000000000000A001 /* KukiTests.xctest */,
+				A5000000000000000000A001 /* KukiWidgetExtension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A1000000000000000000E001 /* Kuki */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1000000000000000000F002 /* Build configuration list for PBXNativeTarget "Kuki" */;
+			buildPhases = (
+				A1000000000000000000C002 /* Sources */,
+				A1000000000000000000C001 /* Frameworks */,
+				A1000000000000000000C003 /* Resources */,
+				A2000000000000000000A301 /* Embed PlugIns */,
+				A5000000000000000000A301 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A2000000000000000000A401 /* PBXTargetDependency */,
+				A5000000000000000000A401 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A1000000000000000000B001 /* Kuki */,
+				A4000000000000000000B001 /* Shared */,
+			);
+			name = Kuki;
+			packageProductDependencies = (
+			);
+			productName = Kuki;
+			productReference = A1000000000000000000A001 /* Kuki.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A2000000000000000000E001 /* KukiMenuBar */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A2000000000000000000F002 /* Build configuration list for PBXNativeTarget "KukiMenuBar" */;
+			buildPhases = (
+				A2000000000000000000C002 /* Sources */,
+				A2000000000000000000C001 /* Frameworks */,
+				A2000000000000000000C003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A2000000000000000000B001 /* KukiMenuBar */,
+			);
+			name = KukiMenuBar;
+			productName = KukiMenuBar;
+			productReference = A2000000000000000000A001 /* KukiMenuBar.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
+		A3000000000000000000E001 /* KukiTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A3000000000000000000F002 /* Build configuration list for PBXNativeTarget "KukiTests" */;
+			buildPhases = (
+				A3000000000000000000C002 /* Sources */,
+				A3000000000000000000C001 /* Frameworks */,
+				A3000000000000000000C003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A3000000000000000000A401 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A3000000000000000000B001 /* KukiTests */,
+			);
+			name = KukiTests;
+			productName = KukiTests;
+			productReference = A3000000000000000000A001 /* KukiTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		A5000000000000000000E001 /* KukiWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A5000000000000000000F002 /* Build configuration list for PBXNativeTarget "KukiWidgetExtension" */;
+			buildPhases = (
+				A5000000000000000000C002 /* Sources */,
+				A5000000000000000000C001 /* Frameworks */,
+				A5000000000000000000C003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A4000000000000000000B001 /* Shared */,
+				A5000000000000000000B001 /* KukiWidget */,
+			);
+			name = KukiWidgetExtension;
+			productName = KukiWidgetExtension;
+			productReference = A5000000000000000000A001 /* KukiWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A1000000000000000000F000 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2700;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					A1000000000000000000E001 = {
+						CreatedOnToolsVersion = 27.1;
+					};
+					A2000000000000000000E001 = {
+						CreatedOnToolsVersion = 27.1;
+					};
+					A3000000000000000000E001 = {
+						CreatedOnToolsVersion = 27.1;
+						TestTargetID = A1000000000000000000E001;
+					};
+					A5000000000000000000E001 = {
+						CreatedOnToolsVersion = 27.1;
+					};
+				};
+			};
+			buildConfigurationList = A1000000000000000000F001 /* Build configuration list for PBXProject "Kuki" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A1000000000000000000D001;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = A1000000000000000000D002 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A1000000000000000000E001 /* Kuki */,
+				A2000000000000000000E001 /* KukiMenuBar */,
+				A3000000000000000000E001 /* KukiTests */,
+				A5000000000000000000E001 /* KukiWidgetExtension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A1000000000000000000C003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A2000000000000000000C003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A3000000000000000000C003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A5000000000000000000C003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A1000000000000000000C002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A2000000000000000000C002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A3000000000000000000C002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A5000000000000000000C002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A2000000000000000000A401 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = maccatalyst;
+			target = A2000000000000000000E001 /* KukiMenuBar */;
+			targetProxy = A2000000000000000000A201 /* PBXContainerItemProxy */;
+		};
+		A3000000000000000000A401 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1000000000000000000E001 /* Kuki */;
+			targetProxy = A3000000000000000000A201 /* PBXContainerItemProxy */;
+		};
+		A5000000000000000000A401 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A5000000000000000000E001 /* KukiWidgetExtension */;
+			targetProxy = A5000000000000000000A201 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		A1000000000000000000F101 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		A1000000000000000000F102 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A1000000000000000000F201 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Config/Kuki.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S6PVT5UP7G;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Kūki";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
+				INFOPLIST_KEY_NSHomeKitUsageDescription = "Kūki reads the CO₂, temperature, humidity and particle levels from your air quality sensor in Apple Home.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				KUKI_CLOUD_CONTAINER = iCloud.com.olshanskysoft.kuki;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.olshanskysoft.kuki;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,6";
+			};
+			name = Debug;
+		};
+		A1000000000000000000F202 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Config/Kuki.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S6PVT5UP7G;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Kūki";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
+				INFOPLIST_KEY_NSHomeKitUsageDescription = "Kūki reads the CO₂, temperature, humidity and particle levels from your air quality sensor in Apple Home.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				KUKI_CLOUD_CONTAINER = iCloud.com.olshanskysoft.kuki;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.olshanskysoft.kuki;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,6";
+			};
+			name = Release;
+		};
+		A2000000000000000000F201 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S6PVT5UP7G;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPrincipalClass = KukiMenuBarController;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.olshanskysoft.kuki.menubar;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 5.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		A2000000000000000000F202 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S6PVT5UP7G;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPrincipalClass = KukiMenuBarController;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.olshanskysoft.kuki.menubar;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 5.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		A3000000000000000000F201 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S6PVT5UP7G;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.olshanskysoft.kuki.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,6";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Kuki.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Kuki";
+			};
+			name = Debug;
+		};
+		A3000000000000000000F202 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S6PVT5UP7G;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.olshanskysoft.kuki.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,6";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Kuki.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Kuki";
+			};
+			name = Release;
+		};
+		A5000000000000000000F201 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/KukiWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S6PVT5UP7G;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/KukiWidget-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Kūki";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				KUKI_CLOUD_CONTAINER = iCloud.com.olshanskysoft.kuki;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.olshanskysoft.kuki.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,6";
+			};
+			name = Debug;
+		};
+		A5000000000000000000F202 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/KukiWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S6PVT5UP7G;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/KukiWidget-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Kūki";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				KUKI_CLOUD_CONTAINER = iCloud.com.olshanskysoft.kuki;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.olshanskysoft.kuki.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,6";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A1000000000000000000F001 /* Build configuration list for PBXProject "Kuki" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1000000000000000000F101 /* Debug */,
+				A1000000000000000000F102 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1000000000000000000F002 /* Build configuration list for PBXNativeTarget "Kuki" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1000000000000000000F201 /* Debug */,
+				A1000000000000000000F202 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A2000000000000000000F002 /* Build configuration list for PBXNativeTarget "KukiMenuBar" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A2000000000000000000F201 /* Debug */,
+				A2000000000000000000F202 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A3000000000000000000F002 /* Build configuration list for PBXNativeTarget "KukiTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A3000000000000000000F201 /* Debug */,
+				A3000000000000000000F202 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A5000000000000000000F002 /* Build configuration list for PBXNativeTarget "KukiWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A5000000000000000000F201 /* Debug */,
+				A5000000000000000000F202 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A1000000000000000000F000 /* Project object */;
+}

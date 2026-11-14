@@ -36,12 +36,13 @@ struct NowView: View {
                 NowDetails(wide: wide)
             }
             .padding(.horizontal, wide ? 48 : 28)
-            // Wide: anchored near the top (not centred), so a window resized
-            // vertically doesn't make the ensō drift.
-            .padding(.top, wide ? max(28, size.height * 0.10) : 12)
+            .padding(.top, wide ? 28 : 12)
             .padding(.bottom, wide ? 36 : 12)
             .frame(maxWidth: wide ? 1120 : 520)
-            .frame(maxWidth: .infinity)
+            // Wide (iPad, Mac): centred in the window — on a tall portrait
+            // iPad or a tall Mac window the content no longer hugs the top
+            // and leaves half the screen empty.
+            .frame(maxWidth: .infinity, minHeight: wide ? max(0, size.height - 1) : nil)
         }
         .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
         .paperBackground()

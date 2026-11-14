@@ -84,7 +84,18 @@ enum AppTab: Hashable { case now, history, export, settings }
 @MainActor
 @Observable
 final class AppNav {
-    var tab: AppTab = .now
+    var tab: AppTab = {
+        #if DEBUG
+        switch UserDefaults.standard.string(forKey: "startTab") {
+        case "history": return .history
+        case "export": return .export
+        case "settings": return .settings
+        default: return .now
+        }
+        #else
+        return .now
+        #endif
+    }()
     var historyRange: ChartRange = .day
     var historyMetric: Metric = .co2
     /// A File › Export request waiting for its save panel (Mac).
@@ -166,6 +177,9 @@ struct RootView: View {
         })
         .onAppear {
             WindowRouter.shared.openWindow = openWindow
+            #if DEBUG && targetEnvironment(macCatalyst)
+            DebugSnapshot.runIfRequested()
+            #endif
             #if targetEnvironment(macCatalyst)
             MenuBarBridge.shared.ensureRecorderWindow()
             #endif

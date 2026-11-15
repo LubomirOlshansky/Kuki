@@ -53129,6 +53129,131 @@
         }
       }
     },
+    "Switches from the demo to your sensor in Apple Home" : {
+      "comment" : "Now screen: VoiceOver hint for the Connect Apple Home link shown while the demo sensor is on",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ينتقل من العرض التجريبي إلى مستشعرك في Apple Home"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wechselt von der Demo zu deinem Sensor in Apple Home"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambia de la demo a tu sensor de Apple Home"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passe de la démo à votre capteur dans Apple Home"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "डेमो से Apple Home में आपके सेंसर पर ले जाता है"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beralih dari demo ke sensor Anda di Apple Home"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passa dalla demo al tuo sensore in Apple Home"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デモからApple Homeのセンサーに切り替えます"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데모에서 Apple Home의 센서로 전환합니다"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schakelt van de demo naar je sensor in Apple Home"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Przełącza z demo na Twój czujnik w Apple Home"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Troca a demonstração pelo seu sensor no Apple Home"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Переключает с демо на ваш датчик в Apple Home"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Byter från demon till din sensor i Apple Home"
+          }
+        },
+        "th" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "เปลี่ยนจากเดโมไปใช้เซ็นเซอร์ของคุณใน Apple Home"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Demodan Apple Home’daki sensörünüze geçer"
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Перемикає з демо на ваш датчик в Apple Home"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chuyển từ bản demo sang cảm biến của bạn trong Apple Home"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从演示切换到 Apple Home 中的传感器"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "從示範切換到 Apple Home 中的感測器"
+          }
+        }
+      }
+    },
     "Synced %@" : {
       "comment" : "Settings › iCloud footer: sync status. Placeholder is a relative time, e.g. '2 min ago'.",
       "localizations" : {

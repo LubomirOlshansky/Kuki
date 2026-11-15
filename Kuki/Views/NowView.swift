@@ -12,6 +12,7 @@ struct NowView: View {
     @Environment(Recorder.self) private var recorder
     @Environment(\.modelContext) private var modelContext
     @State private var choosingPlace = false
+    @State private var connectingHome = false
     @State private var size: CGSize = .zero
 
     /// The ensō follows Dynamic Type on narrow screens and the window on
@@ -48,6 +49,11 @@ struct NowView: View {
         .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
         .paperBackground()
         .sheet(isPresented: $choosingPlace) { PlaceSheet().environment(recorder).environment(\.modelContext, modelContext) }
+        // Owned here, not by the link that opens it: connecting turns the
+        // demo off and finding a sensor replaces the empty state, and either
+        // would take a sheet hosted by the link away mid-flow.
+        .sheet(isPresented: $connectingHome) { AppleHomeConnectSheet().environment(recorder) }
+        .environment(\.connectAppleHome, { connectingHome = true })
     }
 
     private func ensoSize(wide: Bool) -> CGFloat {
@@ -413,6 +419,7 @@ private struct MetricsRow: View {
 
 private struct NowFooter: View {
     @Environment(Recorder.self) private var recorder
+    @Environment(\.connectAppleHome) private var connectAppleHome
 
     var body: some View {
         VStack(alignment: .center, spacing: 18) {
@@ -442,6 +449,25 @@ private struct NowFooter: View {
                 Text(recordingLine).font(.footnote).foregroundStyle(Ink.inkSoft)
             }
             .accessibilityElement(children: .combine)
+
+            // The demo's way back to a real sensor: without it, the only exit
+            // is a toggle in Settings (someone who tapped "Try the demo" in
+            // the introduction never saw the Apple Home screen).
+            if recorder.useDemo {
+                Button {
+                    Analytics.track("connect_home_tapped", ["from": "now_demo"])
+                    connectAppleHome()
+                } label: {
+                    Text("Connect Apple Home")
+                        .font(.subheadline)
+                        .foregroundStyle(Ink.ai)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(QuietButtonStyle())
+                .padding(.top, -12)
+                .accessibilityHint(Text("Switches from the demo to your sensor in Apple Home", comment: "Now screen: VoiceOver hint for the Connect Apple Home link shown while the demo sensor is on"))
+            }
         }
     }
 
@@ -647,7 +673,7 @@ private struct TraceChartDescriptor: AXChartDescriptorRepresentable {
 struct EmptySensorView: View {
     @Environment(Recorder.self) private var recorder
     @Environment(\.openURL) private var openURL
-    @State private var connecting = false
+    @Environment(\.connectAppleHome) private var connectAppleHome
 
     /// Skipped the introduction before connecting: Apple Home was never asked.
     private var notConnected: Bool { !recorder.useDemo && !recorder.homeKitRequested }
@@ -669,7 +695,10 @@ struct EmptySensorView: View {
             // 6 pt top padding; stacked tight, they read as one group.
             VStack(spacing: 0) {
                 if notConnected {
-                    textButton("Connect Apple Home") { connecting = true }
+                    textButton("Connect Apple Home") {
+                        Analytics.track("connect_home_tapped", ["from": "now_empty"])
+                        connectAppleHome()
+                    }
                 }
                 #if !targetEnvironment(macCatalyst)
                 if !notConnected, recorder.homeKit.status == .notAuthorized,
@@ -682,9 +711,6 @@ struct EmptySensorView: View {
         }
         .padding(.horizontal, 12)
         .frame(maxWidth: 420)
-        .sheet(isPresented: $connecting) {
-            AppleHomeConnectSheet().environment(recorder)
-        }
     }
 
     /// Where Home access is granted: System Settings on the Mac, the Settings
@@ -828,4 +854,9 @@ private struct ReachingLabel: View {
                 }
             }
     }
+}
+
+extension EnvironmentValues {
+    /// Opens the "Connect Apple Home" sheet that the Now screen hosts.
+    @Entry var connectAppleHome: () -> Void = {}
 }

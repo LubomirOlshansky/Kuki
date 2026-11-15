@@ -316,3 +316,9 @@ kbd { font: inherit; font-size: 0.85em; padding: 0.05em 0.35em; border-radius: 0
   .top nav a { padding: 0 0.35rem; }
   .brand .kanji { display: none; }
 }
+
+/* Official App Store badge (unaltered Apple artwork) */
+.app-store { display: inline-block; line-height: 0; border-radius: 10px; }
+.app-store img { width: 180px; height: 60px; display: block; }
+.app-store:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.end .app-store { margin: 0.5rem 0 1.25rem; }

@@ -8,6 +8,15 @@
   <sub>iPhone · iPad · Mac &nbsp;·&nbsp; SwiftUI &nbsp;·&nbsp; Apple Home (HomeKit) &nbsp;·&nbsp; works with the IKEA ALPSTUGA</sub>
 </p>
 
+<p align="center">
+  <a href="https://apps.apple.com/app/id6834891785"><img src="https://img.shields.io/badge/App_Store-Download-0D96F6?style=flat-square&logo=apple&logoColor=white" alt="Download on the App Store"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-4A6639?style=flat-square" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/open_source-yes-22211F?style=flat-square" alt="Open source">
+  <a href="https://kuki-co2.pages.dev"><img src="https://img.shields.io/badge/website-kuki--co2.pages.dev-7D5A1A?style=flat-square" alt="Website"></a>
+</p>
+
+<p align="center"><b>Open source</b> — the whole app, widgets, Live Activity and Mac menu bar plug-in, under the MIT license. <a href="https://apps.apple.com/app/id6834891785">Get it on the App Store</a> or build it yourself.</p>
+
 ---
 
 Kūki reads an air-quality sensor from **Apple Home** and shows the one thing that matters most indoors, **CO₂**, as an *ensō* (円相), the single brush-stroke circle of Zen calligraphy. Clear air is a short stroke; stale air closes the circle. Carry the sensor from room to room and Kūki keeps a history **per place**, so you can see which room needs a window open, and when.
@@ -85,7 +94,7 @@ xcrun simctl launch booted com.olshanskysoft.kuki -resetOnboarding YES -onboardi
 
 Steps: `welcome questions breath night listen appleHome place furin plan`. Settings › Replay introduction shows it in any build.
 
-Tests (Swift Testing, 75 tests):
+Tests (Swift Testing, 197 tests):
 
 ```bash
 xcodebuild test -project Kuki.xcodeproj -scheme Kuki -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
@@ -115,6 +124,16 @@ Builds made from a fork send nothing: `Kuki/Analytics/AnalyticsConfig.swift` onl
 ## Releasing
 
 Step-by-step App Store guide: [docs/APP_STORE.md](docs/APP_STORE.md).
+
+## Contributing
+
+Issues and pull requests are welcome: bug reports, sensor compatibility notes, translations, ideas. Please run the tests before opening a pull request. Analytics only starts for the official bundle ID, so builds you make under your own ID send nothing.
+
+## License
+
+Kūki is open source under the [MIT license](LICENSE). Copyright © 2026 Lubomir Olshansky.
+
+The license covers the code. The Kūki name, icon and App Store listing are not licensed for reuse: if you publish your own build, give it a different name and icon.
 
 ---
 

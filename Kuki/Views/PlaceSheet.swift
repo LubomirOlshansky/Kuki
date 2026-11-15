@@ -23,11 +23,11 @@ struct PlaceSheet: View {
                             dismiss()
                         } label: {
                             HStack(spacing: 14) {
-                                Text(place.kanji.isEmpty ? "・" : place.kanji)
+                                Text(verbatim: place.kanji.isEmpty ? "・" : place.kanji)
                                     .font(Typeface.mincho(20))
                                     .foregroundStyle(Ink.inkSoft)
                                     .frame(width: 44, alignment: .leading)
-                                Text(place.name)
+                                Text(place.displayName)
                                     .font(Typeface.body)
                                     .foregroundStyle(Ink.ink)
                                 Spacer()
@@ -55,12 +55,15 @@ struct PlaceSheet: View {
                 } header: {
                     Text("Where is the sensor now?")
                 } footer: {
-                    Text("Moving it starts a \(recorder.settleMinutes)-minute settling period — the CO₂ cell needs time to take on the new room, so those minutes are left out of comparisons.")
+                    Text("Moving it starts a \(recorder.settleMinutes)-minute settling period — the CO₂ cell needs time to take on the new room, so those minutes are left out of comparisons.",
+                         comment: "Places sheet footer. Placeholder is a number of minutes. 'Settling' = the sensor adapting to the air of a new room.")
                 }
 
                 Section("New place") {
                     HStack {
-                        TextField("Hallway, balcony, kid's room…", text: $newName)
+                        TextField(String(localized: "Hallway, balcony, kid's room…",
+                                         comment: "Places sheet: placeholder in the field for naming a new room"),
+                                  text: $newName)
                             .onSubmit(add)
                         Button("Add", action: add)
                             .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -75,10 +78,13 @@ struct PlaceSheet: View {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
             .alert("Rename place", isPresented: $showingRename, presenting: renaming) { place in
-                TextField("Name", text: $renameText)
+                TextField(String(localized: "Name", comment: "Rename place alert: placeholder for the room's name"),
+                          text: $renameText)
                 Button("Save") {
                     let name = renameText.trimmingCharacters(in: .whitespaces)
-                    if !name.isEmpty, name != place.name {
+                    // Against the shown name: confirming an untouched
+                    // seeded place's translation keeps it seeded.
+                    if !name.isEmpty, name != place.displayName {
                         place.name = name
                         try? context.save()
                         recorder.placeEdited(place)
@@ -99,7 +105,7 @@ struct PlaceSheet: View {
     }
 
     private func rename(_ place: Place) {
-        renameText = place.name
+        renameText = place.displayName
         renaming = place
         showingRename = true
     }

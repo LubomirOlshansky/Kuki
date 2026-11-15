@@ -96,22 +96,24 @@ private struct PlaceButton: View {
                 set: { id in if let p = places.first(where: { $0.id == id }) { recorder.move(to: p) } }
             )) {
                 ForEach(places) { p in
-                    Text(p.kanji.isEmpty ? p.name : "\(p.name)  \(p.kanji)").tag(Optional(p.id))
+                    Text(verbatim: p.kanji.isEmpty ? p.displayName : "\(p.displayName)  \(p.kanji)").tag(Optional(p.id))
                 }
             } label: {
-                Text("Move Sensor To")
+                Text("Move Sensor To", comment: "Now screen: heading of the menu listing the rooms the sensor can be moved to")
             }
             .pickerStyle(.inline)
             Divider()
             Button("Edit Places…", systemImage: "square.and.pencil") { choosingPlace = true }
         } label: {
             VStack(spacing: 6) {
-                Text("Sensor is in").kukiLabel()
+                Text("Sensor is in", comment: "Now screen: small uppercase label above the name of the room the sensor is in")
+                    .kukiLabel()
                 HStack(spacing: 10) {
                     if let kanji = place?.kanji, !kanji.isEmpty {
                         Text(kanji).font(Typeface.mincho(22)).foregroundStyle(Ink.inkSoft)
                     }
-                    Text(place?.name ?? "Choose a place")
+                    Text(verbatim: place?.displayName ?? String(localized: "Choose a place",
+                                                         comment: "Now screen: shown instead of a room name when the sensor has no place yet"))
                         .font(.system(.title2))
                         .foregroundStyle(Ink.ink)
                     Image(systemName: "chevron.down")
@@ -131,7 +133,10 @@ private struct PlaceButton: View {
         .buttonStyle(QuietButtonStyle())
         .menuIndicator(.hidden)
         .help("Move the sensor to another place")
-        .accessibilityLabel("Sensor place: \(place?.name ?? "none")")
+        .accessibilityLabel(place.map {
+            String(localized: "Sensor place: \($0.displayName)",
+                   comment: "Now screen, VoiceOver: the room the sensor is in. Placeholder is the room's name.")
+        } ?? String(localized: "Sensor place: none", comment: "Now screen, VoiceOver: the sensor has no room yet"))
         .accessibilityHint("Choose where the sensor is now")
     }
 }
@@ -192,19 +197,29 @@ private struct HeroReading: View {
 
     private static var pausedAdvice: String {
         #if targetEnvironment(macCatalyst)
-        "Apple Home only updates Kūki in the background when it runs from the menu bar. Turn off Settings › Show in Dock to record around the clock."
+        String(localized: "Apple Home only updates Kūki in the background when it runs from the menu bar. Turn off Settings › Show in Dock to record around the clock.",
+               comment: "Now screen (Mac): why recording is paused. 'Show in Dock' is the name of a Kūki setting.")
         #else
-        "Apple Home only updates the app in front. Station Mode keeps Kūki in front and recording."
+        String(localized: "Apple Home only updates the app in front. Station Mode keeps Kūki in front and recording.",
+               comment: "Now screen: why recording is paused. 'Station Mode' is Kūki's dim, always-awake screen mode.")
         #endif
     }
 
     private var lastHeardText: String {
         if pausedInBackground {
-            guard let lastHeard else { return "Paused" }
-            return "Paused · last \(lastHeard.formatted(date: .omitted, time: .shortened))"
+            guard let lastHeard else {
+                return String(localized: "Paused", comment: "Now screen: recording is paused because Kūki is in the background")
+            }
+            let time = lastHeard.formatted(date: .omitted, time: .shortened)
+            return String(localized: "Paused · last \(time)",
+                          comment: "Now screen: recording paused; placeholder is the time of the last reading, e.g. 14:05")
         }
-        guard let lastHeard else { return "Sensor out of reach" }
-        return "Sensor out of reach · last \(lastHeard.formatted(date: .omitted, time: .shortened))"
+        guard let lastHeard else {
+            return String(localized: "Sensor out of reach", comment: "Now screen: the air sensor can't be heard right now")
+        }
+        let time = lastHeard.formatted(date: .omitted, time: .shortened)
+        return String(localized: "Sensor out of reach · last \(time)",
+                      comment: "Now screen: the sensor can't be heard; placeholder is the time of the last reading, e.g. 14:05")
     }
 
     var body: some View {
@@ -233,7 +248,7 @@ private struct HeroReading: View {
                         .minimumScaleFactor(0.5)
                         .contentTransition(.numericText(value: co2))
                         .animation(.smooth(duration: 0.6), value: co2)
-                    Text("ppm CO₂").kukiLabel()
+                    Text(verbatim: "ppm CO₂").kukiLabel()
                 }
                 .frame(maxWidth: ensoSize * 0.72)
             }
@@ -249,7 +264,8 @@ private struct HeroReading: View {
                         Text(lastHeardText).font(Typeface.title).foregroundStyle(Ink.ink)
                         Text(pausedInBackground
                              ? Self.pausedAdvice
-                             : "Recording pauses until Apple Home hears from it again.")
+                             : String(localized: "Recording pauses until Apple Home hears from it again.",
+                                      comment: "Now screen: shown under 'Sensor out of reach'; 'it' is the sensor"))
                             .font(Typeface.body)
                             .foregroundStyle(Ink.inkSoft)
                     }
@@ -307,11 +323,14 @@ private struct SettlingLabel: View {
             let left = SettleProgress.minutesLeft(changedAt: changedAt, minutes: minutes, now: context.date)
             Group {
                 if left > 0 {
-                    Label("Settling in · \(left) min", systemImage: "hourglass")
+                    Label(String(localized: "Settling in · \(left) min",
+                                 comment: "Now screen: minutes left while the sensor adapts to a new room's air (its CO₂ cell needs time). Short."),
+                          systemImage: "hourglass")
                         .font(.footnote)
                         .foregroundStyle(Ink.inkSoft)
                         .transition(.opacity)
-                        .accessibilityLabel("Settling into the new place, \(left) minutes left")
+                        .accessibilityLabel(String(localized: "Settling into the new place, \(left) minutes left",
+                                                   comment: "Now screen, VoiceOver: minutes left while the sensor adapts to a new room's air"))
                 }
             }
             .animation(.easeInOut(duration: 0.6), value: left > 0)
@@ -383,6 +402,8 @@ private struct MetricsRow: View {
                     .foregroundStyle(Ink.inkSoft)
             }
             Text(metric.title).kukiLabel()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .ignore)
@@ -398,7 +419,8 @@ private struct NowFooter: View {
             Button {
                 recorder.stationMode = true
             } label: {
-                Label("Station Mode", systemImage: "moon")
+                Label(String(localized: "Station Mode", comment: "Button that starts Station Mode: a dim, always-awake screen for a device left on a charger"),
+                      systemImage: "moon")
                     .font(.subheadline)
                     .foregroundStyle(Ink.ink)
                     .padding(.horizontal, 22)
@@ -425,14 +447,21 @@ private struct NowFooter: View {
 
     private var recordingLine: String {
         if recorder.isSensorStale {
-            return recorder.isPausedInBackground ? "Paused — Kūki is in the background" : "Paused — sensor out of reach"
+            return recorder.isPausedInBackground
+                ? String(localized: "Paused — Kūki is in the background", comment: "Now screen footer: recording status")
+                : String(localized: "Paused — sensor out of reach", comment: "Now screen footer: recording status")
         }
-        if recorder.isCatchingUp { return "Updating from Apple Home…" }
-        var line = "Recording · \(recorder.sensorName)"
-        if let last = recorder.lastRecordedAt {
-            line += " · " + last.formatted(date: .omitted, time: .shortened)
+        if recorder.isCatchingUp {
+            return String(localized: "Updating from Apple Home…", comment: "Now screen footer: recording status while Apple Home reconnects")
         }
-        return line
+        let sensor = recorder.sensorDisplayName
+        guard let last = recorder.lastRecordedAt else {
+            return String(localized: "Recording · \(sensor)",
+                          comment: "Now screen footer: recording status. Placeholder is the sensor's name, e.g. ALPSTUGA.")
+        }
+        let time = last.formatted(date: .omitted, time: .shortened)
+        return String(localized: "Recording · \(sensor) · \(time)",
+                      comment: "Now screen footer: recording status. Placeholders: the sensor's name (e.g. ALPSTUGA), then the time of the last saved reading.")
     }
 }
 
@@ -490,10 +519,16 @@ struct RecentTrace: View {
         let values = points.map(\.co2)
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Last 3 hours").kukiLabel()
+                Text("Last 3 hours", comment: "Now screen: small uppercase label above the CO₂ line of the last three hours")
+                    .kukiLabel()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
                 Spacer()
                 if let peak = values.max() {
-                    Text("Peak \(Metric.co2.format(peak))").font(.footnote).foregroundStyle(Ink.inkSoft)
+                    Text("Peak \(Metric.co2.format(peak))",
+                         comment: "Now screen: the highest CO₂ in the last three hours; placeholder is a number in ppm. Short.")
+                        .font(.footnote).foregroundStyle(Ink.inkSoft)
+                        .lineLimit(1)
                 }
             }
             if points.count < 2 {
@@ -506,12 +541,14 @@ struct RecentTrace: View {
                 let floor = scale.domain.lowerBound
                 Chart {
                     if scale.showsLimit {
-                        RuleMark(y: .value("Limit", limit))
+                        RuleMark(y: .value(String(localized: "Limit", comment: "Chart: the user's CO₂ alert limit line"), limit))
                             .foregroundStyle(Ink.shu.opacity(0.45))
                             .lineStyle(StrokeStyle(lineWidth: 0.75, dash: [3, 4]))
                     }
                     ForEach(points, id: \.time) { p in
-                        AreaMark(x: .value("Time", p.time), yStart: .value("Floor", floor), yEnd: .value("CO₂", p.co2))
+                        AreaMark(x: .value("Time", p.time),
+                                 yStart: .value(String(localized: "Floor", comment: "Chart: the lowest value of the chart's vertical axis (not a building floor)"), floor),
+                                 yEnd: .value("CO₂", p.co2))
                             .foregroundStyle(LinearGradient(colors: [Ink.ink.opacity(0.10), Ink.ink.opacity(0)],
                                                             startPoint: .top, endPoint: .bottom))
                             .interpolationMethod(.catmullRom)
@@ -533,6 +570,8 @@ struct RecentTrace: View {
                     }
                 }
                 .frame(height: 110)
+                // Time runs left to right in every language, RTL included.
+                .environment(\.layoutDirection, .leftToRight)
                 // Keep Swift Charts' own VoiceOver tools (Describe Chart,
                 // Audio Graph) and give them our summary.
                 .accessibilityLabel("CO₂ over the last 3 hours")
@@ -558,14 +597,20 @@ struct RecentTrace: View {
     /// "Now 812 ppm, between 640 and 1020; above the 1000 ppm limit for part of it."
     nonisolated static func summary(_ points: [TracePoint], limit: Double) -> String {
         let values = points.map(\.co2)
-        guard let last = values.last, let low = values.min(), let high = values.max() else { return "No readings yet." }
-        let f = Metric.co2.format
-        var text = "Now \(f(last)) parts per million, between \(f(low)) and \(f(high))"
-        if high >= limit {
-            let share = Double(values.filter { $0 >= limit }.count) / Double(values.count)
-            text += "; over the \(f(limit)) limit \(Int((share * 100).rounded()))% of the time"
+        guard let last = values.last, let low = values.min(), let high = values.max() else {
+            return String(localized: "No readings yet.", comment: "Now screen, VoiceOver chart summary: nothing recorded in the last three hours")
         }
-        return text + "."
+        let f = Metric.co2.format
+        let (now, lo, hi) = (f(last), f(low), f(high))
+        guard high >= limit else {
+            return String(localized: "Now \(now) parts per million, between \(lo) and \(hi).",
+                          comment: "Now screen, VoiceOver chart summary of the last three hours of CO₂. Placeholders: the current, lowest and highest value in ppm.")
+        }
+        let share = Double(values.filter { $0 >= limit }.count) / Double(values.count)
+        let percent = share.formatted(.percent.precision(.fractionLength(0)))
+        let limitText = f(limit)
+        return String(localized: "Now \(now) parts per million, between \(lo) and \(hi); over the \(limitText) limit \(percent) of the time.",
+                      comment: "Now screen, VoiceOver chart summary of the last three hours of CO₂. Placeholders: current, lowest and highest value in ppm, the user's limit in ppm, and a percentage such as 25%.")
     }
 }
 
@@ -578,16 +623,21 @@ private struct TraceChartDescriptor: AXChartDescriptorRepresentable {
         let times = points.map { $0.time.timeIntervalSince1970 }
         let values = points.map(\.co2)
         let x = AXNumericDataAxisDescriptor(
-            title: "Time", range: (times.min() ?? 0)...(times.max() ?? 1), gridlinePositions: []
+            title: String(localized: "Time", comment: "Chart, VoiceOver: name of the time axis"),
+            range: (times.min() ?? 0)...(times.max() ?? 1), gridlinePositions: []
         ) { Date(timeIntervalSince1970: $0).formatted(date: .omitted, time: .shortened) }
         let y = AXNumericDataAxisDescriptor(
             title: "CO₂", range: (values.min() ?? 400)...(max(values.max() ?? 1000, (values.min() ?? 400) + 1)),
             gridlinePositions: [limit]
-        ) { "\(Int($0.rounded())) parts per million" }
+        ) { value in
+            String(localized: "\(Int(value.rounded())) parts per million",
+                   comment: "Chart, VoiceOver: a CO₂ value on the vertical axis")
+        }
         let series = AXDataSeriesDescriptor(
             name: "CO₂", isContinuous: true,
             dataPoints: points.map { AXDataPoint(x: $0.time.timeIntervalSince1970, y: $0.co2) })
-        return AXChartDescriptor(title: "CO₂ over the last 3 hours",
+        return AXChartDescriptor(title: String(localized: "CO₂ over the last 3 hours",
+                                               comment: "Now screen, VoiceOver: title of the CO₂ chart"),
                                  summary: RecentTrace.summary(points, limit: limit),
                                  xAxis: x, yAxis: y, additionalAxes: [], series: [series])
     }
@@ -641,9 +691,11 @@ struct EmptySensorView: View {
     /// app (one tap away, below) on iPhone and iPad.
     static var homeAccessMessage: String {
         #if targetEnvironment(macCatalyst)
-        "Allow Kūki in System Settings › Privacy & Security › Home, then come back."
+        String(localized: "Allow Kūki in System Settings › Privacy & Security › Home, then come back.",
+               comment: "Shown when Kūki has no access to Apple Home (Mac). Use the System Settings names macOS shows in your language.")
         #else
-        "Allow Home access for Kūki in Settings, then come back."
+        String(localized: "Allow Home access for Kūki in Settings, then come back.",
+               comment: "Shown when Kūki has no access to Apple Home (iPhone/iPad). 'Settings' is the iOS Settings app.")
         #endif
     }
 
@@ -660,25 +712,30 @@ struct EmptySensorView: View {
     }
 
     private var title: String {
-        if notConnected { return "Kūki isn't connected to Apple Home yet" }
+        if notConnected {
+            return String(localized: "Kūki isn't connected to Apple Home yet", comment: "Now screen, no sensor yet: title")
+        }
         return switch recorder.homeKit.status {
-        case .starting: "Looking for your sensor…"
-        case .notAuthorized: "Kūki can't see Apple Home"
-        case .noHomes: "No home in Apple Home"
-        case .noSensors: "No air sensor found"
-        case .ready: "Waiting for the first reading…"
+        case .starting: String(localized: "Looking for your sensor…", comment: "Now screen, no sensor yet: title")
+        case .notAuthorized: String(localized: "Kūki can't see Apple Home", comment: "Now screen, no sensor yet: title when Home access was denied")
+        case .noHomes: String(localized: "No home in Apple Home", comment: "Now screen, no sensor yet: title when the Home app has no home set up")
+        case .noSensors: String(localized: "No air sensor found", comment: "Now screen, no sensor yet: title")
+        case .ready: String(localized: "Waiting for the first reading…", comment: "Now screen, no sensor yet: title")
         }
     }
 
     private var message: String {
-        if notConnected { return "Connect to read your air sensor." }
+        if notConnected {
+            return String(localized: "Connect to read your air sensor.", comment: "Now screen, no sensor yet: message under the title")
+        }
         return switch recorder.homeKit.status {
         case .starting, .ready:
-            "Values arrive from Apple Home in a few seconds."
+            String(localized: "Values arrive from Apple Home in a few seconds.", comment: "Now screen, no sensor yet: message under the title")
         case .notAuthorized:
             Self.homeAccessMessage
         case .noHomes, .noSensors:
-            "Add your IKEA ALPSTUGA in the Home app first. Kūki will find it there."
+            String(localized: "Add your IKEA ALPSTUGA in the Home app first. Kūki will find it there.",
+                   comment: "Now screen, no sensor yet: message. IKEA ALPSTUGA is a product name; 'the Home app' is Apple's Home app.")
         }
     }
 }
@@ -706,7 +763,9 @@ private struct LiveActivityButton: View {
                 }
             }
         } label: {
-            Label(running ? "Remove from Lock Screen" : "Show on Lock Screen",
+            Label(running
+                  ? String(localized: "Remove from Lock Screen", comment: "Now screen: button that ends the Live Activity showing the air on the Lock Screen")
+                  : String(localized: "Show on Lock Screen", comment: "Now screen: button that starts a Live Activity showing the air on the Lock Screen"),
                   systemImage: running ? "lock.slash" : "lock.rectangle.on.rectangle")
                 .font(.subheadline)
                 .foregroundStyle(Ink.ink)

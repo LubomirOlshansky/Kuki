@@ -85,15 +85,22 @@ enum AiringReminder {
     /// names the user typed stay exactly as typed.
     static func title(placeName: String?) -> String {
         guard let name = placeName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
-            return "Time to air the room"
+            return String(localized: "Time to air the room", comment: "Airing reminder notification title when no room is known.")
         }
-        if Place.isSeeded(name) {
-            return "Time to air the \(name.lowercased())"
+        // One sentence per seeded room, so each language can inflect it.
+        switch Place.seededIndex(name) {
+        case 0: return String(localized: "Time to air the living room", comment: "Airing reminder notification title for the default Living room.")
+        case 1: return String(localized: "Time to air the bedroom", comment: "Airing reminder notification title for the default Bedroom.")
+        case 2: return String(localized: "Time to air the study", comment: "Airing reminder notification title for the default Study (home office).")
+        case 3: return String(localized: "Time to air the kitchen", comment: "Airing reminder notification title for the default Kitchen.")
+        default:
+            return String(localized: "Time to air \(name)", comment: "Airing reminder notification title. %@ = a room name the user typed, exactly as typed (e.g. \"Anna's room\", \"Office\").")
         }
-        return "Time to air \(name)"
     }
 
-    static let body = "Open a window wide for 5 minutes."
+    static var body: String {
+        String(localized: "Open a window wide for 5 minutes.", comment: "Airing reminder notification body.")
+    }
 
     /// One repeating calendar request per time.
     static func requests(times: [ReminderTime], placeName: String?) -> [ReminderRequest] {

@@ -27,8 +27,8 @@ final class LiveAir {
         case noReading, notAllowed
         var errorDescription: String? {
             switch self {
-            case .noReading: "There's no CO₂ reading yet. Wait for the first one, then try again."
-            case .notAllowed: "Live Activities are off for Kūki. Turn them on in Settings › Kūki."
+            case .noReading: String(localized: "There's no CO₂ reading yet. Wait for the first one, then try again.", comment: "Error when starting the Live Activity (Lock Screen reading) before any CO₂ reading exists.")
+            case .notAllowed: String(localized: "Live Activities are off for Kūki. Turn them on in Settings › Kūki.", comment: "Error when Live Activities are disabled. 'Settings › Kūki' is the path in the iOS Settings app: use your language's name of the Settings app.")
             }
         }
     }

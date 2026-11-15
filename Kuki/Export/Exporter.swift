@@ -11,10 +11,10 @@ enum ExportRange: String, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .day: "24 h"
-        case .week: "7 days"
-        case .month: "30 days"
-        case .all: "All"
+        case .day: String(localized: "24 h", comment: "Export: period option, the last 24 hours (segmented control, keep very short)")
+        case .week: String(localized: "7 days", comment: "Export: period option, the last 7 days (segmented control, keep short)")
+        case .month: String(localized: "30 days", comment: "Export: period option, the last 30 days (segmented control, keep short)")
+        case .all: String(localized: "All", comment: "Export: period option, all recorded history (segmented control, keep short)")
         }
     }
 
@@ -154,6 +154,8 @@ enum Exporter {
         return f
     }()
 
+    /// Machine-readable numbers: `String(format:)` without a locale is POSIX
+    /// ("19.6", never "19,6" or Arabic-Indic digits), whatever the app's language.
     private static func n(_ v: Double?, _ digits: Int = 0) -> String {
         guard let v else { return "" }
         return String(format: "%.\(digits)f", v)
@@ -184,6 +186,11 @@ enum Exporter {
     }
 
     // MARK: Markdown — made to be pasted into Claude / ChatGPT
+    //
+    // The prose (title, headings, the brief and the context notes) is in the
+    // app's language: the user reads what they paste, and the assistant reads
+    // any language. The data stays machine-readable in every language: the
+    // summary table's column headers, the CSV block, POSIX numbers and units.
 
     /// `sensor` is a fallback; the brief names the sensors the rows actually came from.
     static func markdown(_ rows: [Row], limit: Double, sensor: String) -> String {
@@ -193,28 +200,57 @@ enum Exporter {
         let dateStyle = Date.FormatStyle(date: .abbreviated, time: .shortened)
         let sensors = orderedUnique(rows.map(\.sensor).filter { !$0.isEmpty })
         let sensorText = sensors.isEmpty ? sensor : sensors.joined(separator: ", ")
-        let limitText = Metric.co2.format(limit)
+        let limitText = n(limit)
+        let exported = Date.now.formatted(dateStyle)
+        let zone = TimeZone.current.identifier
+        let first = rows.first.map { $0.time.formatted(dateStyle) } ?? "—"
+        let last = rows.last.map { $0.time.formatted(dateStyle) } ?? "—"
+        let sampleCount = rows.count
 
+        let title = String(localized: "Indoor air log — exported from Kūki",
+                           comment: "Markdown export brief for an AI assistant: document title")
+        let ask = String(localized: "I moved one air-quality sensor (\(sensorText)) between rooms of my home and logged it. Please analyse this data: compare the rooms, spot patterns by time of day, and tell me concretely when and where I should ventilate, and anything else worth changing.",
+                         comment: "Markdown export brief for an AI assistant: the user's request, written in the first person. Placeholder is the sensor's name, e.g. ALPSTUGA.")
+        let contextHeading = String(localized: "Context", comment: "Markdown export brief for an AI assistant: section heading")
+        let exportedLine = String(localized: "Exported: \(exported) (time zone \(zone))",
+                                  comment: "Markdown export brief for an AI assistant: bullet. Placeholders: the export date and time, then a time-zone identifier such as Europe/Berlin.")
+        let periodLine = String(localized: "Period: \(first) → \(last)",
+                                comment: "Markdown export brief for an AI assistant: bullet. Placeholders: first and last sample's date and time.")
+        let samplesLine = String(localized: "Samples: \(sampleCount)",
+                                 comment: "Markdown export brief for an AI assistant: bullet with the number of samples (a label, not a sentence)")
+        let bucketLine = String(localized: "The table below is averaged into \(bucket)-minute buckets.",
+                                comment: "Markdown export brief for an AI assistant: bullet. Placeholder is a number of minutes (1 to 240).")
+        let unitsLine = String(localized: "Units: CO₂ in ppm, temperature in °C, relative humidity in %, PM2.5 in µg/m³.",
+                               comment: "Markdown export brief for an AI assistant: bullet. Keep the units ppm, °C, %, µg/m³ and the names CO₂ and PM2.5.")
+        let placeLine = String(localized: "Each \"place\" is where the sensor sat. The CO₂ cell needs ~10 minutes to adapt after a move; those samples are flagged `settling` and left out of the summary.",
+                               comment: "Markdown export brief for an AI assistant: bullet. Keep `settling` in backticks unchanged: it is the CSV column name.")
+        let gapsLine = String(localized: "Gaps in time mean the app was closed — no data, not clean air.",
+                              comment: "Markdown export brief for an AI assistant: bullet")
+        let referenceLine = String(localized: "Reference: outdoor CO₂ ≈ 420 ppm · under 800 good · 800–1000 acceptable · over 1000 ventilation advised (my alert limit is \(limitText) ppm) · over 1400 poor. Comfortable humidity 40–60 %. WHO PM2.5 24-hour guideline: 15 µg/m³.",
+                                   comment: "Markdown export brief for an AI assistant: bullet with reference CO₂ levels. Placeholder is the user's CO₂ alert limit, e.g. 1000. WHO = World Health Organization (use its usual abbreviation in your language).")
+        let summaryHeading = String(localized: "Summary by place",
+                                    comment: "Markdown export brief for an AI assistant: section heading above a per-room table")
+        let dataHeading = String(localized: "Data (\(bucket)-minute averages)",
+                                 comment: "Markdown export brief for an AI assistant: section heading above the CSV data. Placeholder is a number of minutes (1 to 240).")
+
+        // The table's column headers stay as they are in every language: they
+        // label data, like the CSV columns below.
         var md = """
-        # Indoor air log — exported from Kūki
+        # \(title)
 
-        I moved one air-quality sensor (\(sensorText)) between rooms of my home and logged it.
-        Please analyse this data: compare the rooms, spot patterns by time of day, and
-        tell me concretely when and where I should ventilate, and anything else worth changing.
+        \(ask)
 
-        ## Context
-        - Exported: \(Date.now.formatted(dateStyle)) (time zone \(TimeZone.current.identifier))
-        - Period: \(rows.first.map { $0.time.formatted(dateStyle) } ?? "—") → \(rows.last.map { $0.time.formatted(dateStyle) } ?? "—")
-        - Samples: \(rows.count); the table below is averaged into \(bucket)-minute buckets.
-        - Units: CO₂ in ppm, temperature in °C, relative humidity in %, PM2.5 in µg/m³.
-        - Each "place" is where the sensor sat. The CO₂ cell needs ~10 minutes to adapt after a
-          move; those samples are flagged `settling` and left out of the summary.
-        - Gaps in time mean the app was closed — no data, not clean air.
-        - Reference: outdoor CO₂ ≈ 420 ppm · under 800 good · 800–1000 acceptable ·
-          over 1000 ventilation advised (my alert limit is \(limitText) ppm) · over 1400 poor.
-          Comfortable humidity 40–60 %. WHO PM2.5 24-hour guideline: 15 µg/m³.
+        ## \(contextHeading)
+        - \(exportedLine)
+        - \(periodLine)
+        - \(samplesLine)
+        - \(bucketLine)
+        - \(unitsLine)
+        - \(placeLine)
+        - \(gapsLine)
+        - \(referenceLine)
 
-        ## Summary by place
+        ## \(summaryHeading)
         | Place | Hours | Avg CO₂ | Peak CO₂ | Time ≥ \(limitText) ppm | Avg °C | Avg %RH | Avg PM2.5 |
         |---|---:|---:|---:|---:|---:|---:|---:|
 
@@ -226,7 +262,7 @@ enum Exporter {
 
         md += """
 
-        ## Data (\(bucket)-minute averages)
+        ## \(dataHeading)
         ```csv
         \(csv(compact).trimmingCharacters(in: .newlines))
         ```
@@ -301,7 +337,8 @@ enum Exporter {
         }
         let descriptor = FetchDescriptor<Reading>(predicate: predicate, sortBy: [SortDescriptor(\.timestamp)])
         let rows = try context.fetch(descriptor).map { Row($0) }
-        let resolved = ReadingPlaces.resolve(rows, liveNames: try liveNames(context), book: book ?? .stored())
+        let live = try livePlaces(context)
+        let resolved = ReadingPlaces.resolve(rows, liveNames: live.names, liveKanji: live.kanji, book: book ?? .stored())
         return resolved.filter { $0.time >= start }
     }
 
@@ -325,14 +362,18 @@ enum Exporter {
             Row(time: r.timestamp, place: r.placeName, placeID: r.placeID, co2: nil, temperature: nil,
                 humidity: nil, pm25: nil, settling: false, sensor: r.sensorName, origin: r.originDeviceID)
         }
-        let resolved = ReadingPlaces.resolve(rows, liveNames: try liveNames(context), book: book ?? .stored())
+        let live = try livePlaces(context)
+        let resolved = ReadingPlaces.resolve(rows, liveNames: live.names, liveKanji: live.kanji, book: book ?? .stored())
             .filter { $0.time >= start }
         return (resolved.count, Set(resolved.map(\.placeKey)).count)
     }
 
-    private static func liveNames(_ context: ModelContext) throws -> [UUID: String] {
+    /// Live places' stored names and kanji, by id (`ReadingPlaces` shows
+    /// each under its `displayName`).
+    private static func livePlaces(_ context: ModelContext) throws -> (names: [UUID: String], kanji: [UUID: String]) {
         let places = try context.fetch(FetchDescriptor<Place>())
-        return Dictionary(places.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
+        return (Dictionary(places.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a }),
+                Dictionary(places.map { ($0.id, $0.kanji) }, uniquingKeysWith: { a, _ in a }))
     }
 
     static func fileName(_ ext: String) -> String {

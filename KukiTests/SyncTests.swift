@@ -466,6 +466,158 @@ struct PlaceSyncTests {
     }
 }
 
+// MARK: - Seeded places across languages
+
+/// The seed table a German build would read from its bundle. Passed in
+/// explicitly: the test host's bundle may not carry German yet, and the
+/// answer must not depend on it.
+private let german = SeedNames(names: [["Wohnzimmer"], ["Schlafzimmer"], ["Arbeitszimmer"], ["Küche"]])
+
+private func seeded(_ id: UUID = UUID(), _ name: String, _ kanji: String, created: Date,
+                    origin: String? = deviceB) -> PlaceSnapshot {
+    PlaceSnapshot(id: id, name: name, kanji: kanji, sortIndex: 0, deleted: false, modifiedAt: created,
+                  createdAt: created, originDeviceID: origin, mergedInto: nil)
+}
+
+@Suite("Sync — seeded places across languages")
+struct SeededAcrossLanguagesTests {
+    @Test func theRuleIsKanjiPlusASeedName() {
+        #expect(german.identity(name: "Living room", kanji: "居間") == 0)
+        #expect(german.identity(name: " wohnzimmer ", kanji: "居間") == 0, "normalized like the name merge")
+        #expect(german.identity(name: "KUCHE", kanji: "台所") == 3, "case and diacritics folded")
+        #expect(german.identity(name: "Büro", kanji: "居間") == nil, "renamed: the user's own place")
+        #expect(german.identity(name: "Wohnzimmer", kanji: "") == nil, "kanji cleared: the user's own place")
+        #expect(german.identity(name: "Wohnzimmer", kanji: "寝室") == nil, "a name and a kanji from different seeds")
+        #expect(german.index(ofName: "Schlafzimmer") == 1)
+        #expect(german.index(ofName: "Hall") == nil)
+        // Without German, only English counts as seeded.
+        #expect(SeedNames(names: []).identity(name: "Wohnzimmer", kanji: "居間") == nil)
+        #expect(SeedNames(names: []).identity(name: "Living room", kanji: "居間") == 0)
+    }
+
+    @Test func untouchedSeedsDisplayInTheUsersLanguage() {
+        let here = Place.localizedDefaultNames
+        #expect(german.displayName(name: "Wohnzimmer", kanji: "居間") == here[0])
+        #expect(german.displayName(name: "Living room", kanji: "居間") == here[0])
+        #expect(german.displayName(name: "Büro", kanji: "居間") == "Büro", "renamed: shown as typed")
+        #expect(german.displayName(name: "Lounge", kanji: "") == "Lounge")
+    }
+
+    @Test func englishAndGermanSeedsMergeSymmetrically() {
+        let living = seeded(UUID(), "Living room", "居間", created: t0, origin: deviceA)
+        let wohn = seeded(UUID(), "Wohnzimmer", "居間", created: t0.addingTimeInterval(500), origin: deviceB)
+        // A (English) sees B's younger Wohnzimmer; B (German) sees A's older Living room. Same answer: A's id.
+        #expect(PlaceResolver.resolve(remote: wohn, local: nil, livePlaces: [living], localDeviceID: deviceA,
+                                      seeds: german) == .mergeIntoLocal(living.id))
+        #expect(PlaceResolver.resolve(remote: living, local: nil, livePlaces: [wohn], localDeviceID: deviceB,
+                                      seeds: german) == .adoptRemote(replacing: wohn.id))
+        // Each seed finds its own counterpart, not another seed.
+        let bedroom = seeded(UUID(), "Bedroom", "寝室", created: t0, origin: deviceA)
+        let schlaf = seeded(UUID(), "Schlafzimmer", "寝室", created: t0.addingTimeInterval(500), origin: deviceB)
+        #expect(PlaceResolver.resolve(remote: schlaf, local: nil, livePlaces: [living, bedroom], localDeviceID: deviceA,
+                                      seeds: german) == .mergeIntoLocal(bedroom.id))
+        // Two seeded Living rooms made on one device stay deliberate.
+        let sibling = seeded(UUID(), "Wohnzimmer", "居間", created: t0.addingTimeInterval(9), origin: deviceB)
+        #expect(PlaceResolver.resolve(remote: sibling, local: nil, livePlaces: [wohn], localDeviceID: deviceA,
+                                      seeds: german) == .insert)
+    }
+
+    @Test func aRenamedSeededPlaceDoesNotMerge() {
+        let living = seeded(UUID(), "Living room", "居間", created: t0, origin: deviceA)
+        // B renamed its Wohnzimmer to Büro, keeping the kanji: a room of its own now.
+        let office = seeded(UUID(), "Büro", "居間", created: t0.addingTimeInterval(500), origin: deviceB)
+        #expect(PlaceResolver.resolve(remote: office, local: nil, livePlaces: [living], localDeviceID: deviceA,
+                                      seeds: german) == .insert)
+        // …and from B's side, our untouched Living room doesn't swallow its Büro.
+        #expect(PlaceResolver.resolve(remote: living, local: nil, livePlaces: [office], localDeviceID: deviceB,
+                                      seeds: german) == .insert)
+        // Ours renamed, theirs untouched: no merge either way.
+        let lounge = seeded(UUID(), "Lounge", "居間", created: t0, origin: deviceA)
+        let wohn = seeded(UUID(), "Wohnzimmer", "居間", created: t0.addingTimeInterval(500), origin: deviceB)
+        #expect(PlaceResolver.resolve(remote: wohn, local: nil, livePlaces: [lounge], localDeviceID: deviceA,
+                                      seeds: german) == .insert)
+    }
+
+    @Test func aCustomPlaceWithASeedKanjiStaysApart() {
+        // Decision: the kanji alone never makes two places one. A custom place
+        // that happens to wear 居間 is the user's own, even next to a seed.
+        let living = seeded(UUID(), "Living room", "居間", created: t0, origin: deviceA)
+        let custom = seeded(UUID(), "Tatami room", "居間", created: t0.addingTimeInterval(500), origin: deviceB)
+        #expect(PlaceResolver.resolve(remote: custom, local: nil, livePlaces: [living], localDeviceID: deviceA,
+                                      seeds: german) == .insert)
+        // A custom place that only *shares a seed's name* still merges by
+        // name, as before — the name merge is unchanged.
+        let typed = seeded(UUID(), "Living room", "", created: t0.addingTimeInterval(500), origin: deviceB)
+        #expect(PlaceResolver.resolve(remote: typed, local: nil, livePlaces: [living], localDeviceID: deviceA,
+                                      seeds: german) == .mergeIntoLocal(living.id))
+        // But a kanji-less German name is not the English seed.
+        let typedGerman = seeded(UUID(), "Wohnzimmer", "", created: t0.addingTimeInterval(500), origin: deviceB)
+        #expect(PlaceResolver.resolve(remote: typedGerman, local: nil, livePlaces: [living], localDeviceID: deviceA,
+                                      seeds: german) == .insert)
+    }
+
+    /// The whole path on the English device: B (German) installed first, so
+    /// its Wohnzimmer is older and wins; B's Schlafzimmer is younger and joins
+    /// our Bedroom. History from both devices ends up under one place each.
+    @MainActor @Test func readingsFromBothDevicesResolveUnderTheSurvivor() async throws {
+        let container = try syncContainer()
+        let context = container.mainContext
+        let clock = Clock(t0)
+        let recorder = Recorder(defaults: syncDefaults(), clock: { clock.now })
+        recorder.configure(container: container) // seeds the four defaults; Living room is current
+        let outbox = FakeOutbox()
+        let core = makeCore(container, clock: clock, outbox: outbox)
+        core.recorder = recorder
+        core.seedNames = german
+        let here = core.livePlaces()
+        let livingHere = here[0], bedroomHere = here[1]
+        #expect(livingHere.kanji == "居間" && bedroomHere.kanji == "寝室")
+        #expect(recorder.currentPlaceID == livingHere.id)
+        let before = t0.addingTimeInterval(-7200)
+        insertReading(context, before, place: livingHere.id, placeName: livingHere.name)
+        insertReading(context, before.addingTimeInterval(60), place: bedroomHere.id, placeName: bedroomHere.name)
+        try context.save()
+
+        // B's Wohnzimmer is older → we adopt its id.
+        let wohn = seeded(UUID(), "Wohnzimmer", "居間", created: livingHere.createdAt.addingTimeInterval(-86_400))
+        await core.applyRemotePlace(wohn)
+        // B's Schlafzimmer is younger → it joins our Bedroom.
+        let schlaf = seeded(UUID(), "Schlafzimmer", "寝室", created: bedroomHere.createdAt.addingTimeInterval(3600))
+        await core.applyRemotePlace(schlaf)
+
+        let live = core.livePlaces()
+        #expect(live.count == 4, "no duplicate rooms")
+        #expect(live.filter { $0.kanji == "居間" }.map(\.id) == [wohn.id], "one living room, with the older id")
+        #expect(live.filter { $0.kanji == "寝室" }.map(\.id) == [bedroomHere.id], "one bedroom, ours")
+        #expect(recorder.currentPlaceID == wohn.id, "the sensor follows the merge")
+        #expect(outbox.saves.contains(.place(livingHere.id)), "our copy's tombstone goes up")
+        #expect(!outbox.saves.contains(.place(schlaf.id)), "its own device writes that tombstone")
+        let tomb = await core.record(for: .place(livingHere.id)).flatMap(SyncRecords.place(from:))
+        #expect(tomb?.deleted == true && tomb?.mergedInto == wohn.id)
+
+        // B's history arrives, filed under B's ids.
+        let start = EpochHour.start(hour0)
+        _ = await core.applyRemoteChunk(HourChunk(deviceID: deviceB, epochHour: hour0, sensorName: "ALPSTUGA", readings: [
+            values(start.addingTimeInterval(30), place: wohn.id, placeName: "Wohnzimmer"),
+            values(start.addingTimeInterval(90), place: schlaf.id, placeName: "Schlafzimmer"),
+        ]))
+        let stored = try context.fetch(FetchDescriptor<Reading>())
+        #expect(stored.count == 4)
+        #expect(Set(stored.compactMap(\.placeID)) == [wohn.id, bedroomHere.id], "stored under the survivors")
+
+        // History reads both devices' readings under one place per room.
+        let book = PlaceBook(ledger: core.ledger, localDeviceID: deviceA)
+        let rows = try Exporter.fetchRows(container: container, since: before.addingTimeInterval(-60),
+                                          filter: .excludingDemo, book: book)
+        #expect(rows.count == 4)
+        let byPlace = Dictionary(grouping: rows, by: { $0.placeID })
+        #expect(byPlace[wohn.id]?.compactMap(\.origin).sorted() == [deviceB])
+        #expect(byPlace[wohn.id]?.count == 2, "ours and theirs")
+        #expect(byPlace[bedroomHere.id]?.count == 2, "ours and theirs")
+        #expect(Set(rows.map(\.placeKey)).count == 2)
+    }
+}
+
 // MARK: - Sensor state
 
 @Suite("Sync — sensor's place")

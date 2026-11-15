@@ -57,8 +57,9 @@ struct SaveRetryBook: Equatable {
     var problem: String? {
         switch gaveUp.count {
         case 0: nil
-        case 1: "A change couldn't be saved to iCloud"
-        case let n: "\(n) changes couldn't be saved to iCloud"
+        case 1: String(localized: "A change couldn't be saved to iCloud", comment: "Settings, iCloud Sync status line: one change failed to upload.")
+        // n ≥ 2, but still a plural key: Russian, Polish, Arabic… inflect by count.
+        case let n: String(localized: "\(n) changes couldn't be saved to iCloud", comment: "Settings, iCloud Sync status line: several changes failed to upload. %lld = number of changes (2 or more).")
         }
     }
 }
@@ -110,6 +111,9 @@ final class SyncCore {
     /// clocked so they win (or lose) correctly once it's back on.
     weak var outbox: SyncOutbox?
     weak var recorder: Recorder?
+    /// The seeded places' names in every language, for the cross-language
+    /// twin merge (`PlaceResolver`). Tests pass their own table.
+    var seedNames: SeedNames = .bundled
     private let now: () -> Date
     private let log = Logger(subsystem: "com.olshanskysoft.kuki", category: "sync")
 
@@ -590,7 +594,8 @@ final class SyncCore {
         let key = remote.id.uuidString
         let local = localSnapshot(remote.id)
         let live = livePlaces().map(snapshot(of:))
-        let decision = PlaceResolver.resolve(remote: remote, local: local, livePlaces: live, localDeviceID: deviceID)
+        let decision = PlaceResolver.resolve(remote: remote, local: local, livePlaces: live, localDeviceID: deviceID,
+                                              seeds: seedNames)
         switch decision {
         case .insert:
             insertPlace(remote)

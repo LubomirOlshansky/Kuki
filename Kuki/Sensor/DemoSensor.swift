@@ -4,7 +4,12 @@ import SwiftData
 /// A pretend ALPSTUGA so the app can be tried (and designed) without a real
 /// sensor — e.g. in the Simulator, which has no Apple Home.
 struct DemoSensor {
+    /// Stored with every demo reading and matched by `SensorFilter` — an
+    /// identifier, never translated. Show `displayName` instead.
     static let name = "Demo sensor"
+    static var displayName: String {
+        String(localized: "Demo sensor", comment: "Name of the built-in simulated sensor (demo mode), e.g. \"Recording · Demo sensor\".")
+    }
 
     private(set) var snapshot: SensorSnapshot
 
@@ -53,16 +58,17 @@ struct DemoSensor {
             let place = places[placeIndex]
             let hour = Calendar.current.component(.hour, from: t)
             // Bedrooms climb overnight with the door shut; kitchens spike at meals.
-            let target: Double = switch place.name {
-            case "Bedroom": (hour >= 23 || hour < 7) ? 1450 : 700
-            case "Kitchen": [8, 13, 19].contains(hour) ? 1100 : 650
-            case "Study": (9..<18).contains(hour) ? 1050 : 600
-            default: 750
-            }
+            // Seeded rooms by index, so this works whatever language named them.
+            let seeded = Place.seededIndex(place.name)
+            let (isBedroom, isStudy, isKitchen) = (seeded == 1, seeded == 2, seeded == 3)
+            let target: Double = if isBedroom { (hour >= 23 || hour < 7) ? 1450 : 700 }
+                else if isKitchen { [8, 13, 19].contains(hour) ? 1100 : 650 }
+                else if isStudy { (9..<18).contains(hour) ? 1050 : 600 }
+                else { 750 }
             co2 += (target - co2) * 0.04 + Double.random(in: -12...12)
-            temp += ((place.name == "Bedroom" ? 19.5 : 21.8) - temp) * 0.03 + Double.random(in: -0.05...0.05)
-            hum += ((place.name == "Kitchen" ? 56 : 46) - hum) * 0.03 + Double.random(in: -0.3...0.3)
-            pm += ((place.name == "Kitchen" && [8, 13, 19].contains(hour) ? 22 : 5) - pm) * 0.06 + Double.random(in: -0.6...0.6)
+            temp += ((isBedroom ? 19.5 : 21.8) - temp) * 0.03 + Double.random(in: -0.05...0.05)
+            hum += ((isKitchen ? 56 : 46) - hum) * 0.03 + Double.random(in: -0.3...0.3)
+            pm += ((isKitchen && [8, 13, 19].contains(hour) ? 22 : 5) - pm) * 0.06 + Double.random(in: -0.6...0.6)
 
             context.insert(Reading(
                 timestamp: t, co2: co2.rounded(), temperature: (temp * 10).rounded() / 10,

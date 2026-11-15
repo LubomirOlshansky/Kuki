@@ -17,7 +17,7 @@ struct HistoryView: View {
                     .padding(.top, 12)
 
                 Picker("Range", selection: $nav.historyRange) {
-                    ForEach(ChartRange.allCases) { Text($0.title).tag($0) }
+                    ForEach(ChartRange.allCases) { Text(verbatim: $0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
 
@@ -53,8 +53,8 @@ struct HistoryView: View {
         .menuStyle(.button)
         .buttonStyle(QuietButtonStyle())
         .menuIndicator(.hidden)
-        .accessibilityLabel("Share the \(nav.historyRange.spokenTitle)")
-        .help("Share the \(nav.historyRange.spokenTitle) as a file")
+        .accessibilityLabel(nav.historyRange.shareLabel)
+        .help(nav.historyRange.shareHelp)
     }
 
     private func file(_ kind: ExportFile.Kind) -> ExportFile {
@@ -69,10 +69,10 @@ enum ChartRange: String, CaseIterable, Identifiable, Sendable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .hours3: "3 h"
-        case .day: "24 h"
-        case .week: "7 d"
-        case .month: "30 d"
+        case .hours3: String(localized: "3 h", comment: "History: chart range, the last 3 hours (segmented control, keep very short)")
+        case .day: String(localized: "24 h", comment: "History: chart range, the last 24 hours (segmented control, keep very short)")
+        case .week: String(localized: "7 d", comment: "History: chart range, the last 7 days (segmented control, keep very short; d = days)")
+        case .month: String(localized: "30 d", comment: "History: chart range, the last 30 days (segmented control, keep very short; d = days)")
         }
     }
     var seconds: Double {
@@ -86,10 +86,28 @@ enum ChartRange: String, CaseIterable, Identifiable, Sendable {
     var start: Date { .now.addingTimeInterval(-seconds) }
     var spokenTitle: String {
         switch self {
-        case .hours3: "last 3 hours"
-        case .day: "last 24 hours"
-        case .week: "last 7 days"
-        case .month: "last 30 days"
+        case .hours3: String(localized: "last 3 hours", comment: "History, VoiceOver: the chart's period, a phrase inside a list such as 'Temperature, last 3 hours, by place'")
+        case .day: String(localized: "last 24 hours", comment: "History, VoiceOver: the chart's period, a phrase inside a list such as 'Temperature, last 24 hours, by place'")
+        case .week: String(localized: "last 7 days", comment: "History, VoiceOver: the chart's period, a phrase inside a list such as 'Temperature, last 7 days, by place'")
+        case .month: String(localized: "last 30 days", comment: "History, VoiceOver: the chart's period, a phrase inside a list such as 'Temperature, last 30 days, by place'")
+        }
+    }
+    /// VoiceOver label of the History share button.
+    var shareLabel: String {
+        switch self {
+        case .hours3: String(localized: "Share the last 3 hours", comment: "History: VoiceOver label of the share button")
+        case .day: String(localized: "Share the last 24 hours", comment: "History: VoiceOver label of the share button")
+        case .week: String(localized: "Share the last 7 days", comment: "History: VoiceOver label of the share button")
+        case .month: String(localized: "Share the last 30 days", comment: "History: VoiceOver label of the share button")
+        }
+    }
+    /// Pointer tooltip of the History share button.
+    var shareHelp: String {
+        switch self {
+        case .hours3: String(localized: "Share the last 3 hours as a file", comment: "History: tooltip of the share button")
+        case .day: String(localized: "Share the last 24 hours as a file", comment: "History: tooltip of the share button")
+        case .week: String(localized: "Share the last 7 days as a file", comment: "History: tooltip of the share button")
+        case .month: String(localized: "Share the last 30 days as a file", comment: "History: tooltip of the share button")
         }
     }
     /// Short axis labels that never collide: hours for a day, days for longer.
@@ -236,8 +254,10 @@ struct HistoryBody: View {
                         .transition(.opacity)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("By place").kukiLabel()
-                        Text("Settling minutes after each move are left out.")
+                        Text("By place", comment: "History: small uppercase label above the per-room statistics")
+                            .kukiLabel()
+                        Text("Settling minutes after each move are left out.",
+                             comment: "History: note under 'By place'. 'Settling' = the minutes after the sensor is moved, while it adapts to the new room's air.")
                             .font(.caption)
                             .foregroundStyle(Ink.inkSoft)
                     }
@@ -297,12 +317,14 @@ struct HistoryBody: View {
     }
 
     private var emptyText: String {
-        let every = intervalMinutes <= 1 ? "every minute" : "every \(intervalMinutes) minutes"
+        let minutes = max(1, intervalMinutes)
         #if targetEnvironment(macCatalyst)
         // On the Mac, Kūki records from the menu bar, window open or not.
-        return "Nothing recorded in this period yet. Kūki records \(every) while it's in the menu bar."
+        return String(localized: "Nothing recorded in this period yet. Kūki records every \(minutes) minutes while it's in the menu bar.",
+                      comment: "History (Mac), empty period. Placeholder is the recording interval in minutes; for 1, say 'every minute'.")
         #else
-        return "Nothing recorded in this period yet. Keep Kūki open — it records \(every)."
+        return String(localized: "Nothing recorded in this period yet. Keep Kūki open — it records every \(minutes) minutes.",
+                      comment: "History, empty period. Placeholder is the recording interval in minutes; for 1, say 'every minute'.")
         #endif
     }
 
@@ -341,6 +363,12 @@ struct HistoryBody: View {
         return (lo - pad)...(hi + pad)
     }
 
+    /// Chart value labels (read by VoiceOver and Audio Graph).
+    nonisolated static var timeLabel: String { String(localized: "Time", comment: "Chart, VoiceOver: name of the time axis") }
+    nonisolated static var placeLabel: String { String(localized: "Place", comment: "History chart, VoiceOver: the room a line belongs to") }
+    nonisolated static var lineLabel: String { String(localized: "Line", comment: "History chart, VoiceOver: one continuous stretch of a room's line") }
+    nonisolated static var selectedLabel: String { String(localized: "Selected", comment: "History chart, VoiceOver: the moment chosen with a finger or the pointer") }
+
     static let symbols: [BasicChartSymbolShape] = [.circle, .square, .triangle, .diamond, .pentagon, .cross]
     /// A stretch of one reading: a small dot, the same in every mode (with
     /// the place's shape when colour alone mustn't carry it).
@@ -357,11 +385,13 @@ struct HistoryBody: View {
         let co2Scale = TraceScale(values: values, limit: limit)
         return Chart {
             if metric == .co2 && co2Scale.showsLimit {
-                RuleMark(y: .value("Limit", limit))
+                RuleMark(y: .value(String(localized: "Limit", comment: "Chart: the user's CO₂ alert limit line"), limit))
                     .foregroundStyle(Ink.shu.opacity(0.4))
                     .lineStyle(StrokeStyle(lineWidth: 0.75, dash: [3, 4]))
                     .annotation(position: .top, alignment: .leading) {
-                        Text("limit \(Metric.co2.format(limit))").font(.caption2).foregroundStyle(Ink.shu)
+                        Text("limit \(Metric.co2.format(limit))",
+                             comment: "History chart: tiny label on the CO₂ limit line; placeholder is a ppm number. Keep very short, lowercase if natural.")
+                            .font(.caption2).foregroundStyle(Ink.shu)
                     }
             }
             // One line per stretch of a place: colour says which place, and
@@ -376,23 +406,23 @@ struct HistoryBody: View {
                 let place = names[p.placeKey] ?? p.place
                 let index = seriesIndex(p.placeKey, in: model)
                 if p.isSingle {
-                    PointMark(x: .value("Time", p.time), y: .value(metric.title, p.value))
-                        .foregroundStyle(by: .value("Place", place))
-                        .symbol(by: .value("Place", place))
+                    PointMark(x: .value(Self.timeLabel, p.time), y: .value(metric.title, p.value))
+                        .foregroundStyle(by: .value(Self.placeLabel, place))
+                        .symbol(by: .value(Self.placeLabel, place))
                         .symbolSize(Self.loneSymbolSize)
                 } else if differentiateWithoutColor {
                     // Shape and dash carry the place too, not colour alone.
-                    LineMark(x: .value("Time", p.time), y: .value(metric.title, p.value),
-                             series: .value("Line", p.series))
-                        .foregroundStyle(by: .value("Place", place))
+                    LineMark(x: .value(Self.timeLabel, p.time), y: .value(metric.title, p.value),
+                             series: .value(Self.lineLabel, p.series))
+                        .foregroundStyle(by: .value(Self.placeLabel, place))
                         .lineStyle(StrokeStyle(lineWidth: 1.4, dash: Self.dashes[index % Self.dashes.count]))
                         .interpolationMethod(.monotone)
-                        .symbol(by: .value("Place", place))
+                        .symbol(by: .value(Self.placeLabel, place))
                         .symbolSize(14)
                 } else {
-                    LineMark(x: .value("Time", p.time), y: .value(metric.title, p.value),
-                             series: .value("Line", p.series))
-                        .foregroundStyle(by: .value("Place", place))
+                    LineMark(x: .value(Self.timeLabel, p.time), y: .value(metric.title, p.value),
+                             series: .value(Self.lineLabel, p.series))
+                        .foregroundStyle(by: .value(Self.placeLabel, place))
                         .lineStyle(StrokeStyle(lineWidth: 1.4))
                         .interpolationMethod(.monotone)
                 }
@@ -404,20 +434,21 @@ struct HistoryBody: View {
             // place to another.
             ForEach(model.gaps) { gap in
                 if gap.isBridged {
-                    LineMark(x: .value("Time", gap.from.time), y: .value(metric.title, gap.from.value),
-                             series: .value("Line", "gap-\(gap.id)"))
+                    LineMark(x: .value(Self.timeLabel, gap.from.time), y: .value(metric.title, gap.from.value),
+                             series: .value(Self.lineLabel, "gap-\(gap.id)"))
                         .foregroundStyle(Ink.inkFaint)
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 4]))
-                    LineMark(x: .value("Time", gap.to.time), y: .value(metric.title, gap.to.value),
-                             series: .value("Line", "gap-\(gap.id)"))
+                    LineMark(x: .value(Self.timeLabel, gap.to.time), y: .value(metric.title, gap.to.value),
+                             series: .value(Self.lineLabel, "gap-\(gap.id)"))
                         .foregroundStyle(Ink.inkFaint)
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 4]))
                 }
                 if gap.to.time.timeIntervalSince(gap.from.time) > range.seconds * 0.12 {
-                    PointMark(x: .value("Time", gap.middle), y: .value(metric.title, (gap.from.value + gap.to.value) / 2))
+                    PointMark(x: .value(Self.timeLabel, gap.middle), y: .value(metric.title, (gap.from.value + gap.to.value) / 2))
                         .opacity(0)
                         .annotation(position: .top, spacing: 2) {
-                            Text("no data").font(.caption2).foregroundStyle(Ink.inkSoft)
+                            Text("no data", comment: "History chart: tiny label over a stretch with no recordings. Keep very short, lowercase if natural.")
+                                .font(.caption2).foregroundStyle(Ink.inkSoft)
                         }
                 }
             }
@@ -425,7 +456,7 @@ struct HistoryBody: View {
             // The readout: a hairline at the chosen moment and what the air was.
             if let selected {
                 let place = names[selected.placeKey] ?? selected.place
-                RuleMark(x: .value("Selected", selected.time))
+                RuleMark(x: .value(Self.selectedLabel, selected.time))
                     .foregroundStyle(Ink.inkFaint)
                     .lineStyle(StrokeStyle(lineWidth: 0.75))
                     .annotation(position: .top, alignment: .center, spacing: 4,
@@ -433,7 +464,7 @@ struct HistoryBody: View {
                         ChartReadout(value: "\(metric.format(selected.value)) \(metric.unit)",
                                      detail: "\(place) · \(selected.time.formatted(range.readoutFormat))")
                     }
-                PointMark(x: .value("Selected", selected.time), y: .value(metric.title, selected.value))
+                PointMark(x: .value(Self.selectedLabel, selected.time), y: .value(metric.title, selected.value))
                     .foregroundStyle(Ink.ink)
                     .symbolSize(36)
             }
@@ -482,7 +513,10 @@ struct HistoryBody: View {
         #else
         .chartXSelection(value: $selectedTime)
         #endif
-        .accessibilityLabel("\(metric.longTitle), \(range.spokenTitle), by place")
+        // Time runs left to right in every language, RTL included.
+        .environment(\.layoutDirection, .leftToRight)
+        .accessibilityLabel(String(localized: "\(metric.longTitle), \(range.spokenTitle), by place",
+                                   comment: "History chart, VoiceOver label. Placeholders: the value's name (e.g. Temperature) and the period (e.g. last 24 hours)."))
         .accessibilityChartDescriptor(HistoryChartDescriptor(model: model, names: names, limit: limit))
     }
 
@@ -493,22 +527,46 @@ struct HistoryBody: View {
             let over = stats.filter { ($0.shareOverLimit ?? 0) > 0 }
                 .max { ($0.shareOverLimit ?? 0) < ($1.shareOverLimit ?? 0) }
             if let over, let share = over.shareOverLimit {
-                return "\(over.place) was over the limit \(Int((share * 100).rounded()))% of the time."
+                return overLimitSentence(place: over.place, share: share)
             }
             if let worst = stats.first, let avg = worst.avgCO2 {
-                return "Every place stayed under \(Metric.co2.format(limit)) ppm. \(worst.place) averaged \(Metric.co2.format(avg))."
+                let (limitText, avgText, place) = (Metric.co2.format(limit), Metric.co2.format(avg), worst.place)
+                return String(localized: "Every place stayed under \(limitText) ppm. \(place) averaged \(avgText).",
+                              comment: "History: one-line takeaway above the chart. Placeholders: the CO₂ limit in ppm, a room's name, its average CO₂ in ppm.")
             }
-            return "No CO₂ readings in this period."
+            return noReadingsSentence(.co2)
         }
         guard let top = stats.filter({ $0.average(metric) != nil })
             .max(by: { ($0.average(metric) ?? 0) < ($1.average(metric) ?? 0) }),
-              let value = top.average(metric) else { return "No \(metric.longTitle.lowercased()) readings in this period." }
-        let v = metric.format(value)
+              let value = top.average(metric) else { return noReadingsSentence(metric) }
+        let (v, place) = (metric.format(value), top.place)
         switch metric {
-        case .temperature: return "\(top.place) was the warmest, \(v) °C on average."
-        case .humidity: return "\(top.place) was the most humid, \(v) % on average."
-        case .pm25: return "\(top.place) had the most fine particles, \(v) µg/m³ on average."
+        case .temperature:
+            return String(localized: "\(place) was the warmest, \(v) °C on average.",
+                          comment: "History: one-line takeaway above the temperature chart. Placeholders: a room's name, a temperature.")
+        case .humidity:
+            return String(localized: "\(place) was the most humid, \(v) % on average.",
+                          comment: "History: one-line takeaway above the humidity chart. Placeholders: a room's name, relative humidity in percent.")
+        case .pm25:
+            return String(localized: "\(place) had the most fine particles, \(v) µg/m³ on average.",
+                          comment: "History: one-line takeaway above the PM2.5 chart. Placeholders: a room's name, a value in µg/m³.")
         case .co2: return ""
+        }
+    }
+
+    /// "Bedroom was over the limit 82% of the time."
+    nonisolated static func overLimitSentence(place: String, share: Double) -> String {
+        let percent = share.formatted(.percent.precision(.fractionLength(0)))
+        return String(localized: "\(place) was over the limit \(percent) of the time.",
+                      comment: "History: one-line takeaway, also read by VoiceOver. Placeholders: a room's name, a percentage such as 82%. 'The limit' is the user's CO₂ alert limit.")
+    }
+
+    nonisolated static func noReadingsSentence(_ metric: Metric) -> String {
+        switch metric {
+        case .co2: String(localized: "No CO₂ readings in this period.", comment: "History: takeaway when the period has no data")
+        case .temperature: String(localized: "No temperature readings in this period.", comment: "History: takeaway when the period has no data")
+        case .humidity: String(localized: "No humidity readings in this period.", comment: "History: takeaway when the period has no data")
+        case .pm25: String(localized: "No PM2.5 readings in this period.", comment: "History: takeaway when the period has no data. PM2.5 = fine particles; keep the name PM2.5.")
         }
     }
 
@@ -518,17 +576,21 @@ struct HistoryBody: View {
             let over = stats.filter { ($0.shareOverLimit ?? 0) > 0 }
                 .max { ($0.shareOverLimit ?? 0) < ($1.shareOverLimit ?? 0) }
             if let over, let share = over.shareOverLimit {
-                return "\(over.place) was over the limit \(Int((share * 100).rounded()))% of the time."
+                return overLimitSentence(place: over.place, share: share)
             }
             if let worst = stats.first, let avg = worst.avgCO2 {
-                return "No place reached the \(Metric.co2.format(limit)) ppm limit. \(worst.place) averaged highest, \(Metric.co2.spoken(avg))."
+                let (limitText, place, spoken) = (Metric.co2.format(limit), worst.place, Metric.co2.spoken(avg))
+                return String(localized: "No place reached the \(limitText) ppm limit. \(place) averaged highest, \(spoken).",
+                              comment: "History chart, VoiceOver summary. Placeholders: the CO₂ limit in ppm, a room's name, a spoken value such as 'CO₂ 812 parts per million'.")
             }
-            return "No CO₂ readings in this period."
+            return noReadingsSentence(.co2)
         }
         guard let top = stats.filter({ $0.average(metric) != nil })
             .max(by: { ($0.average(metric) ?? 0) < ($1.average(metric) ?? 0) }),
-              let value = top.average(metric) else { return "No \(metric.longTitle.lowercased()) readings in this period." }
-        return "\(top.place) averaged highest, \(metric.spoken(value))."
+              let value = top.average(metric) else { return noReadingsSentence(metric) }
+        let (place, spoken) = (top.place, metric.spoken(value))
+        return String(localized: "\(place) averaged highest, \(spoken).",
+                      comment: "History chart, VoiceOver summary. Placeholders: a room's name, a spoken value such as 'Temperature 21.4 degrees Celsius'.")
     }
 
     /// How far round a place's small ensō reaches: CO₂ on the same scale as
@@ -630,12 +692,16 @@ private struct HistoryChartDescriptor: AXChartDescriptorRepresentable {
         let lo = values.min() ?? 0
         let t0 = times.min() ?? 0
         let x = AXNumericDataAxisDescriptor(
-            title: "Time", range: t0...(max(times.max() ?? 1, t0 + 1)), gridlinePositions: []
+            title: HistoryBody.timeLabel, range: t0...(max(times.max() ?? 1, t0 + 1)), gridlinePositions: []
         ) { Date(timeIntervalSince1970: $0).formatted(date: .abbreviated, time: .shortened) }
         let y = AXNumericDataAxisDescriptor(
             title: metric.longTitle, range: lo...(max(values.max() ?? 1, lo + 1)),
             gridlinePositions: metric == .co2 ? [limit] : []
-        ) { "\(metric.format($0)) \(metric.spokenUnit)" }
+        ) { value in
+            let (number, unit) = (metric.format(value), metric.spokenUnit)
+            return String(localized: "\(number) \(unit)",
+                          comment: "History chart, VoiceOver: a value followed by its spoken unit, e.g. '21.4 degrees Celsius'. Reorder if your language puts the unit first.")
+        }
         let grouped = Dictionary(grouping: model.points, by: \.placeKey)
         let series = model.series.compactMap { s -> AXDataSeriesDescriptor? in
             guard let points = grouped[s.key] else { return nil }
@@ -643,7 +709,9 @@ private struct HistoryChartDescriptor: AXChartDescriptorRepresentable {
                 name: names[s.key] ?? s.name, isContinuous: true,
                 dataPoints: points.map { AXDataPoint(x: $0.time.timeIntervalSince1970, y: $0.value) })
         }
-        return AXChartDescriptor(title: "\(metric.longTitle), \(model.key.range.spokenTitle)",
+        let (name, period) = (metric.longTitle, model.key.range.spokenTitle)
+        return AXChartDescriptor(title: String(localized: "\(name), \(period)",
+                                               comment: "History chart, VoiceOver title. Placeholders: the value's name (e.g. Temperature) and the period (e.g. last 24 hours)."),
                                  summary: HistoryBody.summary(model.stats, metric: metric, limit: limit),
                                  xAxis: x, yAxis: y, additionalAxes: [], series: series)
     }
@@ -690,29 +758,50 @@ private struct PlaceStatRow: View {
                     }
                     if !large { Spacer() }
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text("avg").kukiLabel()
+                        Text("avg", comment: "History › By place: tiny uppercase label before a room's average value (abbreviation of 'average')")
+                            .kukiLabel()
                         Text(metric.format(average))
                             .font(.system(.title3).monospacedDigit())
                             .foregroundStyle(Ink.ink)
                         Text(metric.unit).font(.caption).foregroundStyle(Ink.inkSoft)
                     }
                 }
-                details {
-                    Text("\(stats.hours.formatted(.number.precision(.fractionLength(1)))) h observed")
-                    if metric == .co2 {
-                        if let peak = stats.peakCO2 { Text("peak \(Metric.co2.format(peak))") }
-                        if let share = stats.shareOverLimit {
-                            Text("\(Int((share * 100).rounded()))% over \(Metric.co2.format(limit))")
-                                .foregroundStyle(share > 0.2 ? Ink.shu : Ink.inkSoft)
+                // One line in English; a longer translation that doesn't fit
+                // stacks the three facts rather than truncating them.
+                Group {
+                    if large {
+                        details { detailItems }
+                    } else {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 16) { detailItems }
+                            VStack(alignment: .leading, spacing: 2) { detailItems }
                         }
                     }
                 }
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
                 .font(.caption)
                 .foregroundStyle(Ink.inkSoft)
             }
         }
         .padding(.vertical, 14)
         .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder private var detailItems: some View {
+        Text("\(stats.hours.formatted(.number.precision(.fractionLength(1)))) h observed",
+             comment: "History › By place: hours of recordings for a room; placeholder is a decimal number such as 12.5 (h = hours). Short.")
+        if metric == .co2 {
+            if let peak = stats.peakCO2 {
+                Text("peak \(Metric.co2.format(peak))",
+                     comment: "History › By place: a room's highest CO₂, in ppm. Short, lowercase if natural.")
+            }
+            if let share = stats.shareOverLimit {
+                Text("\(share.formatted(.percent.precision(.fractionLength(0)))) over \(Metric.co2.format(limit))",
+                     comment: "History › By place: share of the time a room's CO₂ was at or above the limit, e.g. '25% over 1000'. Short.")
+                    .foregroundStyle(share > 0.2 ? Ink.shu : Ink.inkSoft)
+            }
+        }
     }
 
     private var average: Double? { stats.average(metric) }

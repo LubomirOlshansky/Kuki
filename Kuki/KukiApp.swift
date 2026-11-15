@@ -56,7 +56,7 @@ struct KukiApp: App {
         #if targetEnvironment(macCatalyst)
         // On the Mac, Settings is its own small window (HIG › Settings),
         // opened with ⌘, — not a section of the main window.
-        WindowGroup("Kūki Settings", id: WindowID.settings) {
+        WindowGroup(WindowID.settingsTitle, id: WindowID.settings) {
             SettingsWindow()
                 .environment(recorder)
                 .environment(nav)
@@ -275,13 +275,13 @@ struct KukiCommands: Commands {
             Group {
                 Button("Export CSV…") { requestExport(.csv) }
                     .keyboardShortcut("e", modifiers: [.command, .shift])
-                Button("Export for AI…") { requestExport(.markdown) }
+                Button(String(localized: "Export for AI…", comment: "Mac File menu command: export a Markdown summary made to paste into an AI chat (Claude, ChatGPT).")) { requestExport(.markdown) }
                     .keyboardShortcut("e", modifiers: [.command, .shift, .option])
             }
             .disabled(!nav.introductionDone)
         }
         #endif
-        CommandMenu("Air") {
+        CommandMenu(Text("Air", comment: "Mac menu bar: name of the app's own menu (the air in the room: Now, History, rooms, Station Mode). One short word.")) {
             Group {
                 Button("Now") { show(.now) }.keyboardShortcut("1")
                 Button("History") { show(.history) }.keyboardShortcut("2")
@@ -294,7 +294,7 @@ struct KukiCommands: Commands {
             }
             .disabled(!nav.introductionDone)
             // A toggle, so the same ⌃⌘S that enters Station Mode leaves it.
-            Toggle("Station Mode", isOn: Binding(
+            Toggle(String(localized: "Station Mode", comment: "Mac Air menu command: Kūki's always-on, dim full-screen display mode for a device left on a charger."), isOn: Binding(
                 get: { recorder.stationMode },
                 set: { on in
                     if on { WindowRouter.shared.show(WindowID.main, using: openWindow) }
@@ -303,7 +303,7 @@ struct KukiCommands: Commands {
             ))
             .keyboardShortcut("s", modifiers: [.command, .control])
             .disabled(!nav.introductionDone)
-            Button("Play Chime") {
+            Button(String(localized: "Play Chime", comment: "Mac Air menu command: play the alert sound (the fūrin, a Japanese wind-bell) as a preview.")) {
                 recorder.previewAlert()
                 Analytics.track("chime_played_manually")
             }
@@ -338,7 +338,7 @@ private struct PlaceCommands: View {
     @Query(sort: \Place.sortIndex) private var places: [Place]
 
     var body: some View {
-        Menu("Move Sensor To") {
+        Menu(String(localized: "Move Sensor To", comment: "Mac Air menu (title case, opens a submenu of rooms): tell Kūki the air sensor was carried to another room.")) {
             ForEach(places) { place in
                 Toggle(place.name, isOn: Binding(
                     get: { recorder.currentPlaceID == place.id },

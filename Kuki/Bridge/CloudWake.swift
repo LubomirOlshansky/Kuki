@@ -99,9 +99,9 @@ enum CloudWake {
         AmplitudeBackend.shared.flush() // the app may be suspended again any moment
 
         let content = UNMutableNotificationContent()
-        let place = s.placeName.isEmpty ? "The room" : s.placeName
-        content.title = "\(place): \(Metric.co2.format(co2)) ppm CO₂"
-        content.body = "Time to open a window for a few minutes."
+        let place = s.placeName.isEmpty ? String(localized: "The room", comment: "Stands in for the room name at the start of the CO₂ alert notification title when no room is known (\"The room: 1200 ppm CO₂\").") : s.placeName
+        content.title = String(localized: "\(place): \(Metric.co2.format(co2)) ppm CO₂", comment: "CO₂ alert notification title. %1$@ = room name (or 'The room'), %2$@ = CO₂ value. Keep ppm and CO₂.")
+        content.body = String(localized: "Time to open a window for a few minutes.", comment: "CO₂ alert notification body, sent when CO₂ crosses the user's limit.")
         // The app isn't running to ring the bell: the banner carries it.
         content.sound = Furin.notificationSound(appRings: false)
         content.threadIdentifier = "co2"

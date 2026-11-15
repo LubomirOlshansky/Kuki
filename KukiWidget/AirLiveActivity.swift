@@ -24,23 +24,24 @@ struct AirLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.center) {
                     VStack(spacing: 0) {
-                        Text("\(Int(s.co2.rounded()))")
+                        Text(verbatim: wholeNumber(s.co2))
                             .font(.system(size: 30, weight: .light).monospacedDigit())
-                        Text("ppm CO₂").font(.caption2).foregroundStyle(.secondary)
+                        Text(verbatim: "ppm CO₂").font(.caption2).foregroundStyle(.secondary)
                     }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     VStack(alignment: .trailing, spacing: 2) {
-                        if let t = s.temperature { Text(oneDecimal(t) + "°").font(.caption.monospacedDigit()) }
-                        if let h = s.humidity { Text("\(Int(h.rounded()))%").font(.caption.monospacedDigit()) }
+                        if let t = s.temperature { Text(verbatim: oneDecimal(t) + "°").font(.caption.monospacedDigit()) }
+                        if let h = s.humidity { Text(verbatim: percentText(h)).font(.caption.monospacedDigit()) }
                     }
                     .padding(.trailing, 4)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     HStack {
-                        Text(context.isStale ? "Last reading" : level.title).font(.caption)
+                        Text(context.isStale ? lastReadingTitle : level.title).font(.caption)
+                            .lineLimit(1).minimumScaleFactor(0.8)
                         Spacer()
-                        (Text(s.placeName) + Text(" · ") + Text(s.measuredAt, style: .relative))
+                        (Text(s.placeName) + Text(verbatim: " · ") + Text(s.measuredAt, style: .relative))
                             .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
@@ -48,7 +49,7 @@ struct AirLiveActivity: Widget {
                 EnsoRing(fraction: EnsoRing.fraction(for: s.co2), color: tint, lineWidth: 2.5, animated: false)
                     .frame(width: 18, height: 18)
             } compactTrailing: {
-                Text("\(Int(s.co2.rounded()))")
+                Text(verbatim: wholeNumber(s.co2))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(tint)
             } minimal: {
@@ -70,7 +71,7 @@ private struct LockScreenAir: View {
             ZStack {
                 EnsoRing(fraction: EnsoRing.fraction(for: state.co2),
                          color: stale ? Ink.inkFaint : level.color, lineWidth: 5, animated: false)
-                Text("\(Int(state.co2.rounded()))")
+                Text(verbatim: wholeNumber(state.co2))
                     .font(.system(size: 22, weight: .light).monospacedDigit())
                     .foregroundStyle(stale ? Ink.inkSoft : Ink.ink)
                     .minimumScaleFactor(0.7)
@@ -81,20 +82,21 @@ private struct LockScreenAir: View {
                 HStack(spacing: 6) {
                     Text(level.kanji).font(.custom("HiraMinProN-W3", size: 16))
                         .foregroundStyle(stale ? Ink.inkSoft : level.color)
-                    Text(stale ? "Last reading" : level.title).font(.headline.weight(.regular)).foregroundStyle(Ink.ink)
+                    Text(stale ? lastReadingTitle : level.title).font(.headline.weight(.regular)).foregroundStyle(Ink.ink)
+                        .lineLimit(1).minimumScaleFactor(0.8)
                 }
-                Text(stale ? "No new reading. Open Kūki to update." : level.advice)
-                    .font(.footnote).foregroundStyle(Ink.inkSoft).lineLimit(2)
+                Text(stale ? String(localized: "No new reading. Open Kūki to update.", comment: "Live Activity on the Lock Screen when the reading is old (two lines at most).") : level.advice)
+                    .font(.footnote).foregroundStyle(Ink.inkSoft).lineLimit(2).minimumScaleFactor(0.85)
                 HStack(spacing: 10) {
                     if !state.placeKanji.isEmpty {
                         Text(state.placeKanji).font(.custom("HiraMinProN-W3", size: 11)).foregroundStyle(Ink.inkSoft)
                     }
                     Text(state.placeName).font(.caption2).foregroundStyle(Ink.inkSoft)
-                    if let t = state.temperature { Text(oneDecimal(t) + "°").font(.caption2.monospacedDigit()).foregroundStyle(Ink.inkSoft) }
-                    if let h = state.humidity { Text("\(Int(h.rounded()))%").font(.caption2.monospacedDigit()).foregroundStyle(Ink.inkSoft) }
+                    if let t = state.temperature { Text(verbatim: oneDecimal(t) + "°").font(.caption2.monospacedDigit()).foregroundStyle(Ink.inkSoft) }
+                    if let h = state.humidity { Text(verbatim: percentText(h)).font(.caption2.monospacedDigit()).foregroundStyle(Ink.inkSoft) }
                     Spacer(minLength: 0)
-                    (Text(state.measuredAt, style: .relative) + Text(" ago"))
-                        .font(.caption2).foregroundStyle(Ink.inkSoft).lineLimit(1)
+                    Text("\(state.measuredAt, style: .relative) ago", comment: "Widget: how old the last reading is. %@ = a relative duration such as '12 min'. Very small space.")
+                        .font(.caption2).foregroundStyle(Ink.inkSoft).lineLimit(1).minimumScaleFactor(0.8)
                 }
             }
         }
@@ -105,10 +107,11 @@ private struct LockScreenAir: View {
 
     /// "CO₂ 742 parts per million, Fine, temperature 21.4 degrees, humidity 47 percent, Living room"
     private func spokenLabel(_ level: CO2Level) -> String {
-        var label = "CO₂ \(Int(state.co2.rounded())) parts per million, \(stale ? "last reading" : level.title)"
-        if let t = state.temperature { label += ", temperature \(oneDecimal(t)) degrees" }
-        if let h = state.humidity { label += ", humidity \(Int(h.rounded())) percent" }
-        return label + ", \(state.placeName)"
+        var clauses = [AirSpeech.co2(state.co2), stale ? AirSpeech.lastReading : level.title]
+        if let t = state.temperature { clauses.append(AirSpeech.temperature(t)) }
+        if let h = state.humidity { clauses.append(AirSpeech.humidity(h)) }
+        clauses.append(state.placeName)
+        return AirSpeech.list(clauses)
     }
 }
 

@@ -115,7 +115,11 @@ final class OnboardingModel {
 
     /// Night's primary button: "Show me" until the guess is revealed, then
     /// "Continue".
-    var nightPrimaryTitle: String { nightRevealed ? "Continue" : "Show me" }
+    var nightPrimaryTitle: String {
+        nightRevealed
+            ? String(localized: "Continue", comment: "Onboarding: primary button to the next screen (keep short)")
+            : String(localized: "Show me", comment: "Onboarding, Night screen: primary button that reveals the overnight CO₂ curve (keep short)")
+    }
 
     /// "Show me" asks for the reveal; "Continue" moves on — but not in the
     /// same breath as the reveal, so a double tap doesn't skip the sweep.
@@ -242,11 +246,11 @@ final class OnboardingModel {
     func plannedPlace(_ places: [Place], current: UUID?) -> (name: String, kanji: String)? {
         switch draft.answers.place ?? draft.staged.place {
         case .existing(let id):
-            return places.first { $0.id == id }.map { ($0.name, $0.kanji) }
+            return places.first { $0.id == id }.map { ($0.displayName, $0.kanji) }
         case .newPlace(let name):
             return (name, "")
         case nil:
-            return places.first { $0.id == current }.map { ($0.name, $0.kanji) }
+            return places.first { $0.id == current }.map { ($0.displayName, $0.kanji) }
         }
     }
 
@@ -270,7 +274,7 @@ final class SwiftDataPlaceStore: PlaceStore {
 
     func id(named name: String) -> UUID? {
         let all = (try? context.fetch(FetchDescriptor<Place>())) ?? []
-        return all.first { $0.name.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }?.id
+        return all.first { $0.isNamed(name) }?.id
     }
 
     func insert(name: String) -> UUID {

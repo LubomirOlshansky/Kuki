@@ -68,7 +68,9 @@ struct PlaceBook: Sendable, Equatable {
 ///    is unknown here (no live place, no merge, no tombstone) and whose
 ///    stored name matches exactly one live place from a *different* device
 ///    is shown under that place — the same twin the name merge will pick
-///    when the place record arrives.
+///    when the place record arrives. A seeded name in another language
+///    ("Wohnzimmer") matches the same seeded place here ("Living room"), as
+///    the merge would (`SeedNames`).
 /// 3. **No place at all.** A reading recorded with no place ("Unplaced") is
 ///    placed by the *same sensor's* placed readings around it — one sensor
 ///    is in one room at a time: under the nearer neighbour within
@@ -76,6 +78,9 @@ struct PlaceBook: Sendable, Equatable {
 ///    most `bracket` apart. With no such neighbour it stays "Unplaced".
 ///
 /// A real deletion keeps its readings apart, under the name they had.
+///
+/// A reading filed under a live place shows that place's `displayName`: an
+/// untouched seeded place reads in the user's language.
 enum ReadingPlaces {
     /// How close a placed neighbour must be to place a placeless reading
     /// on its own — the same 15 minutes `PlaceStats` counts as "observed".
@@ -92,23 +97,63 @@ enum ReadingPlaces {
 
     /// `rows` in time order (as `Exporter.fetchRows` reads them); the result
     /// keeps that order.
-    static func resolve(_ rows: [Row], liveNames: [UUID: String], book: PlaceBook) -> [Row] {
-        let byName = Dictionary(grouping: liveNames.keys, by: { PlaceResolver.normalized(liveNames[$0] ?? "") })
-        var out = rows.map { file($0, liveNames: liveNames, byName: byName, book: book) }
+    ///
+    /// - Parameters:
+    ///   - liveNames: live places' stored names (what other devices' readings
+    ///     carry, so what twins are matched by).
+    ///   - liveKanji: live places' kanji, for the seeded identity; a place
+    ///     missing here is never taken for a seeded one.
+    static func resolve(_ rows: [Row], liveNames: [UUID: String], liveKanji: [UUID: String] = [:],
+                        book: PlaceBook, seeds: SeedNames = .bundled) -> [Row] {
+        let live = LiveIndex(names: liveNames, kanji: liveKanji, seeds: seeds)
+        var out = rows.map { file($0, live: live, book: book) }
         attributePlaceless(&out)
         return out
     }
 
+    /// The live places, looked up by name and by seeded identity.
+    struct LiveIndex {
+        let names: [UUID: String]
+        let kanji: [UUID: String]
+        let seeds: SeedNames
+        let byName: [String: [UUID]]
+        let bySeed: [Int: [UUID]]
+
+        init(names: [UUID: String], kanji: [UUID: String], seeds: SeedNames) {
+            self.names = names
+            self.kanji = kanji
+            self.seeds = seeds
+            byName = Dictionary(grouping: names.keys, by: { PlaceResolver.normalized(names[$0] ?? "") })
+            var bySeed: [Int: [UUID]] = [:]
+            for (id, name) in names {
+                if let i = seeds.identity(name: name, kanji: kanji[id] ?? "") { bySeed[i, default: []].append(id) }
+            }
+            self.bySeed = bySeed
+        }
+
+        /// The name a live place is shown by, nil when it isn't live.
+        func display(_ id: UUID) -> String? {
+            names[id].map { seeds.displayName(name: $0, kanji: kanji[id] ?? "") }
+        }
+
+        /// Live places a reading's stored name may stand for: the same name,
+        /// or — for a seeded name in any language — the same seeded place.
+        func twins(of name: String) -> Set<UUID> {
+            var out = Set(byName[PlaceResolver.normalized(name)] ?? [])
+            if let i = seeds.index(ofName: name) { out.formUnion(bySeed[i] ?? []) }
+            return out
+        }
+    }
+
     /// Rules 1 and 2: one reading, by its id.
-    static func file(_ row: Row, liveNames: [UUID: String], byName: [String: [UUID]], book: PlaceBook) -> Row {
+    static func file(_ row: Row, live: LiveIndex, book: PlaceBook) -> Row {
         guard let id = row.placeID else { return row }
         let survivor = book.survivor(of: id)
-        if let name = liveNames[survivor] { return row.filed(under: survivor, name: name) }
+        if let name = live.display(survivor) { return row.filed(under: survivor, name: name) }
         if survivor == id, !book.known.contains(id), !book.isOwn(row) {
             let origin = book.device(of: row)
-            let twins = (byName[PlaceResolver.normalized(row.place)] ?? [])
-                .filter { book.device(ofPlace: $0) != origin }
-            if twins.count == 1, let twin = twins.first, let name = liveNames[twin] {
+            let twins = live.twins(of: row.place).filter { book.device(ofPlace: $0) != origin }
+            if twins.count == 1, let twin = twins.first, let name = live.display(twin) {
                 return row.filed(under: twin, name: name)
             }
         }

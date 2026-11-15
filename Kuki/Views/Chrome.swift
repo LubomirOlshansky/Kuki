@@ -3,8 +3,9 @@ import SwiftUI
 /// "記録 History" — the kanji accent and the page's name, the only title
 /// chrome a page has.
 struct PageTitle<Trailing: View>: View {
+    /// Decorative, shown as is in every language.
     let kanji: String
-    let title: String
+    let title: LocalizedStringKey
     @ViewBuilder var trailing: Trailing
     @Environment(\.legibilityWeight) private var legibilityWeight
 
@@ -21,7 +22,7 @@ struct PageTitle<Trailing: View>: View {
 }
 
 extension PageTitle where Trailing == EmptyView {
-    init(kanji: String, title: String) {
+    init(kanji: String, title: LocalizedStringKey) {
         self.init(kanji: kanji, title: title) { EmptyView() }
     }
 }

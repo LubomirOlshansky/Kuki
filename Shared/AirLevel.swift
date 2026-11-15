@@ -25,19 +25,19 @@ enum CO2Level: CaseIterable {
 
     var title: String {
         switch self {
-        case .clear: "Clear air"
-        case .fine: "Fine"
-        case .stale: "Getting stale"
-        case .poor: "Stuffy"
+        case .clear: String(localized: "Clear air", comment: "Air level title (CO₂ under 800 ppm), shown under the ensō, in widgets and the menu bar. Keep short.")
+        case .fine: String(localized: "Fine", comment: "Air level title (CO₂ 800–1000 ppm): the air is acceptable. Shown under the ensō, in widgets and the menu bar. Keep short.")
+        case .stale: String(localized: "Getting stale", comment: "Air level title (CO₂ 1000–1400 ppm): indoor air becoming stale/stuffy — air quality, not food. Shown under the ensō, in widgets and the menu bar. Keep short.")
+        case .poor: String(localized: "Stuffy", comment: "Air level title (CO₂ over 1400 ppm): indoor air is stuffy, ventilate now. Shown under the ensō, in widgets and the menu bar. Keep short.")
         }
     }
 
     var advice: String {
         switch self {
-        case .clear: "Like outside. Nothing to do."
-        case .fine: "Comfortable. Air it out soon."
-        case .stale: "Open a window for a few minutes."
-        case .poor: "Ventilate now — open a window wide."
+        case .clear: String(localized: "Like outside. Nothing to do.", comment: "Advice line under the air level title when CO₂ is as low as outdoor air.")
+        case .fine: String(localized: "Comfortable. Air it out soon.", comment: "Advice line under the air level title when CO₂ is acceptable but rising.")
+        case .stale: String(localized: "Open a window for a few minutes.", comment: "Advice line under the air level title when indoor air is getting stale.")
+        case .poor: String(localized: "Ventilate now — open a window wide.", comment: "Advice line under the air level title when indoor air is stuffy.")
         }
     }
 
@@ -58,8 +58,8 @@ extension CO2Level {
     func advice(habit: String?) -> String {
         guard habit == "windowUsuallyOpen" else { return advice }
         switch self {
-        case .stale: return "Open the window wide for a few minutes. Tilted, it airs slowly."
-        case .poor: return "Open it wide now. A tilted window can't keep up."
+        case .stale: return String(localized: "Open the window wide for a few minutes. Tilted, it airs slowly.", comment: "Advice when indoor air is getting stale, for someone whose window is usually tilted open (a tilt-and-turn window, opened a crack at the top).")
+        case .poor: return String(localized: "Open it wide now. A tilted window can't keep up.", comment: "Advice when indoor air is stuffy, for someone whose window is usually tilted open (a tilt-and-turn window). 'it' = the window.")
         case .clear, .fine: return advice
         }
     }

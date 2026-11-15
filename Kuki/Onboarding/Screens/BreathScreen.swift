@@ -42,8 +42,8 @@ struct BreathScreen: View {
         let gliding = glideStart != nil
         return VStack(spacing: 18) {
             VStack(alignment: .leading, spacing: OnboardingMetrics.titleToBody) {
-                Eyebrow(kanji: "息", word: "Breath")
-                ScreenTitle(text: "Indoors, you breathe each other's air.")
+                Eyebrow(kanji: "息", word: String(localized: "Breath", comment: "Onboarding, Breath screen: eyebrow label above the title, small capitals (one short word)"))
+                ScreenTitle(text: String(localized: "Indoors, you breathe each other's air.", comment: "Onboarding, Breath screen: title"))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .opacity(WideReader.isWide(viewport, dynamicTypeSize) ? 0 : 1)
@@ -71,13 +71,13 @@ struct BreathScreen: View {
                 // No `step:` — on iOS 26 a stepped slider draws a tick per step.
                 Slider(value: Binding(get: { shown }, set: { glideStart = nil; ppm = ($0 / 10).rounded() * 10 }),
                        in: Self.range) {
-                    Text("CO₂")
+                    Text(verbatim: "CO₂")
                 } onEditingChanged: { editing in
                     if editing { model.noteInteraction("ppm_dial") }
                     if editing, glideStart != nil { ppm = shown; glideStart = nil }
                 }
                 .tint(level.color)
-                .accessibilityValue("\(Metric.co2.spoken(shown)), \(level.title)")
+                .accessibilityValue(String(localized: "\(Metric.co2.spoken(shown)), \(level.title)", comment: "VoiceOver value of a CO₂ reading in the onboarding: the spoken reading, then the air level name (e.g. Getting stale)"))
                 Ticks()
             }
             .sensoryFeedback(.selection, trigger: level)
@@ -91,18 +91,19 @@ struct BreathScreen: View {
     /// "1.5% — of each breath, already breathed".
     private func share(_ shown: Double) -> some View {
         let fraction = OnboardingCopy.rebreathedFraction(ppm: shown) * 100
+        let percent = OnboardingCopy.rebreathedFraction(ppm: shown).formatted(.percent.precision(.fractionLength(1)))
         return HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(String(format: "%.1f%%", fraction))
+            Text(percent)
                 .font(Typeface.numeral(shareSize, bold: true).weight(.light))
                 .foregroundStyle(Ink.ink)
                 .contentTransition(.numericText(value: fraction))
                 .animation(.smooth(duration: 0.3), value: fraction)
-            Text("of each breath, already breathed").kukiLabel()
+            Text("of each breath, already breathed", comment: "Onboarding, Breath screen: small-capitals label after a large percentage, e.g. 1.5% | of each breath, already breathed").kukiLabel()
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(String(format: "%.1f percent of each breath was already breathed", fraction))
+        .accessibilityLabel(String(localized: "\(percent) of each breath was already breathed", comment: "Onboarding, Breath screen: VoiceOver label; the placeholder is a percentage such as 1.5%"))
     }
 
     // MARK: Words
@@ -113,27 +114,27 @@ struct BreathScreen: View {
         return VStack(alignment: .leading, spacing: OnboardingMetrics.block) {
             if wide {
                 VStack(alignment: .leading, spacing: OnboardingMetrics.titleToBody) {
-                    Eyebrow(kanji: "息", word: "Breath")
-                    ScreenTitle(text: "Indoors, you breathe each other's air.")
+                    Eyebrow(kanji: "息", word: String(localized: "Breath", comment: "Onboarding, Breath screen: eyebrow label above the title, small capitals (one short word)"))
+                    ScreenTitle(text: String(localized: "Indoors, you breathe each other's air.", comment: "Onboarding, Breath screen: title"))
                 }
             }
             VStack(alignment: .leading, spacing: 12) {
-                BodyText("Outside, air holds about 430 ppm of CO₂. Every breath out holds around 40,000 ppm, nearly a hundred times more.", ink: true)
-                BodyText("So indoor CO₂ is a measure of air that's already been breathed. At 1000 ppm, roughly 1.5% of each breath was recently someone's exhale.")
+                BodyText(String(localized: "Outside, air holds about 430 ppm of CO₂. Every breath out holds around 40,000 ppm, nearly a hundred times more.", comment: "Onboarding, Breath screen: lead paragraph"), ink: true)
+                BodyText(String(localized: "So indoor CO₂ is a measure of air that's already been breathed. At 1000 ppm, roughly 1.5% of each breath was recently someone's exhale.", comment: "Onboarding, Breath screen: body paragraph"))
                 if goals.contains(.freshness) {
-                    PersonalLine(text: "That stuffy feeling often starts here.")
+                    PersonalLine(text: String(localized: "That stuffy feeling often starts here.", comment: "Onboarding, Breath screen: personal line for users who chose the Feeling fresh goal; stuffy = stale indoor air"))
                 }
             }
             VStack(alignment: .leading, spacing: 12) {
-                Text("1000 ppm is a signal, not a danger line.")
+                Text("1000 ppm is a signal, not a danger line.", comment: "Onboarding, Breath screen: section heading")
                     .font(Typeface.title)
                     .foregroundStyle(Ink.ink)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
-                BodyText("Germany's Umweltbundesamt calls indoor air under 1000 ppm harmless, 1000–2000 ppm \u{201C}conspicuous\u{201D}, and over 2000 unacceptable. ASHRAE treats CO₂ as a sign of how well a room is ventilated, not as a health limit.")
-                BodyText("Studies of thinking at these levels are mixed, and the rest of stale air may matter as much as the CO₂. Kūki calls air \u{201C}getting stale\u{201D} from 1000 ppm and \u{201C}stuffy\u{201D} from 1400.")
+                BodyText(String(localized: "Germany's Umweltbundesamt calls indoor air under 1000 ppm harmless, 1000–2000 ppm \u{201C}conspicuous\u{201D}, and over 2000 unacceptable. ASHRAE treats CO₂ as a sign of how well a room is ventilated, not as a health limit.", comment: "Onboarding, Breath screen: body paragraph. Umweltbundesamt (German Environment Agency) and ASHRAE are proper names; use your language's quotation marks"))
+                BodyText(String(localized: "Studies of thinking at these levels are mixed, and the rest of stale air may matter as much as the CO₂. Kūki calls air \u{201C}getting stale\u{201D} from 1000 ppm and \u{201C}stuffy\u{201D} from 1400.", comment: "Onboarding, Breath screen: body paragraph. The quoted words must match the air level names Getting stale and Stuffy used elsewhere in the app"))
                 if goals.contains(.focus) {
-                    PersonalLine(text: "For focus: open a window before long work, not after.")
+                    PersonalLine(text: String(localized: "For focus: open a window before long work, not after.", comment: "Onboarding, Breath screen: personal line for users who chose the Focus goal"))
                 }
             }
             Text(SourcesDisclosure.medicalFinePrint)

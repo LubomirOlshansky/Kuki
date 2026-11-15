@@ -55,6 +55,26 @@ struct ReadingPlacesTests {
         #expect(separate.map(\.placeID) == [theirs])
     }
 
+    @Test func aSeededPlaceInAnotherLanguageIsTheSameTwin() {
+        // The phone is German: its untouched Wohnzimmer hasn't arrived yet. The
+        // merge will make it our Living room 居間, so History already does —
+        // and shows it by the name the user reads here.
+        let german = SeedNames(names: [["Wohnzimmer"], ["Schlafzimmer"], ["Arbeitszimmer"], ["Küche"]])
+        let theirs = UUID()
+        let reading = at(0, "Wohnzimmer", id: theirs, origin: phone)
+        let book = PlaceBook(known: [living], localDeviceID: mac)
+        let rows = ReadingPlaces.resolve([reading], liveNames: live, liveKanji: [living: "居間"], book: book, seeds: german)
+        #expect(rows.map(\.placeID) == [living])
+        #expect(rows.map(\.place) == [Place.localizedDefaultNames[0]])
+        // Our place renamed to something else: no twin, the reading waits.
+        let renamed = ReadingPlaces.resolve([reading], liveNames: [living: "Lounge"], liveKanji: [living: "居間"],
+                                            book: book, seeds: german)
+        #expect(renamed.map(\.placeID) == [theirs])
+        // No kanji known for the live place: never taken for a seed.
+        let noKanji = ReadingPlaces.resolve([reading], liveNames: live, book: book, seeds: german)
+        #expect(noKanji.map(\.placeID) == [theirs])
+    }
+
     @Test func noTwinFromTheReadingsOwnDevice() {
         // The phone made two Bedrooms on purpose; the second hasn't arrived.
         let first = UUID(), second = UUID()

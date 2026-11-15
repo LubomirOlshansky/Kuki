@@ -64,7 +64,7 @@ struct AppleHomeConnectSheet: View {
         .overlay(alignment: .topTrailing) {
             // Not on the primer (one button only), and not while the prompt is up.
             if state != .notRequested && !model.awaitingPrompt {
-                Button("Close") { dismiss() }
+                Button(String(localized: "Close", comment: "Connect Apple Home sheet: closes the sheet (keep short)")) { dismiss() }
                     .font(.subheadline)
                     .foregroundStyle(Ink.inkSoft)
                     .frame(minWidth: 44, minHeight: 44)

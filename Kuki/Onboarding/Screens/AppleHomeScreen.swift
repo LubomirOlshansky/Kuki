@@ -78,7 +78,7 @@ struct AppleHomeScreen: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.5)
                         .contentTransition(.numericText(value: ppm))
-                    Text("ppm CO₂").kukiLabel()
+                    Text(verbatim: "ppm CO₂").kukiLabel()
                 }
                 .frame(maxWidth: size * 0.72)
                 .transition(.inkDiffuseOrFade(reduceMotion: reduceMotion))
@@ -89,8 +89,8 @@ struct AppleHomeScreen: View {
         .animation(reduceMotion ? nil : .smooth(duration: 0.6), value: size)
         .accessibilityElement(children: .ignore)
         .accessibilityHidden(reading?.ppm == nil)
-        .accessibilityLabel("CO₂")
-        .accessibilityValue(reading?.ppm.map { "\(Metric.co2.spoken($0)), \(CO2Level(ppm: $0).title)" } ?? "")
+        .accessibilityLabel(Text(verbatim: "CO₂"))
+        .accessibilityValue(reading?.ppm.map { String(localized: "\(Metric.co2.spoken($0)), \(CO2Level(ppm: $0).title)", comment: "VoiceOver value of a CO₂ reading in the onboarding: the spoken reading, then the air level name (e.g. Getting stale)") } ?? "")
     }
 
     private struct Reading { let ppm: Double?; let fresh: Bool; let token: String }
@@ -117,63 +117,63 @@ struct AppleHomeScreen: View {
         let device = OnboardingCopy.device(platform)
         switch state {
         case .notRequested:
-            block(title: "Kūki reads your sensor through Apple Home.") {
-                BodyText("Next, your \(device) will ask whether Kūki may use your Home data.", ink: true)
-                BodyText("Kūki only reads air sensors: CO₂, temperature, humidity and particles. It never changes anything in your home, and readings stay on your devices.")
+            block(title: String(localized: "Kūki reads your sensor through Apple Home.", comment: "Onboarding, Apple Home screen: title before asking for Home access")) {
+                BodyText(String(localized: "Next, your \(device) will ask whether Kūki may use your Home data.", comment: "Onboarding, Apple Home screen: the placeholder is iPhone, iPad or Mac"), ink: true)
+                BodyText(String(localized: "Kūki only reads air sensors: CO₂, temperature, humidity and particles. It never changes anything in your home, and readings stay on your devices.", comment: "Onboarding, Apple Home screen: body before asking for Home access"))
             }
         case .waiting:
-            block(title: "Listening for Apple Home…") {
-                BodyText("This usually takes a few seconds.")
+            block(title: String(localized: "Listening for Apple Home…", comment: "Onboarding, Apple Home screen: title while waiting for Apple Home to answer")) {
+                BodyText(String(localized: "This usually takes a few seconds.", comment: "Onboarding, Apple Home screen: body while waiting"))
             }
         case .slow:
-            block(title: "Apple Home is taking its time") {
-                BodyText("It can take up to a minute after your \(device) wakes. Check that you're signed in to iCloud and that the Home app shows your home.")
+            block(title: String(localized: "Apple Home is taking its time", comment: "Onboarding, Apple Home screen: title when Apple Home is slow to answer")) {
+                BodyText(String(localized: "It can take up to a minute after your \(device) wakes. Check that you're signed in to iCloud and that the Home app shows your home.", comment: "Onboarding, Apple Home screen: body when slow; the placeholder is iPhone, iPad or Mac"))
             }
         case .found(let s, let ppm, let fresh):
             if fresh || ppm == nil {
                 found(s, ppm: ppm)
             } else {
-                block(title: "Found \(s.name)") {
+                block(title: foundTitle(s)) {
                     sensorLines(s)
-                    BodyText("Last reported \(lastHeardText(s)). Apple Home hasn't sent a new reading yet. It often arrives within a minute.")
+                    BodyText(lastReportedText(s))
                 }
             }
         case .foundWaiting(let s):
-            block(title: "Found \(s.name)") {
+            block(title: foundTitle(s)) {
                 sensorLines(s)
-                BodyText("Waiting for its first reading…")
+                BodyText(String(localized: "Waiting for its first reading…", comment: "Onboarding, Apple Home screen: body after a sensor was found but has not reported yet"))
             }
         case .unreachable(let s):
-            block(title: "\(s.name) is out of reach") {
-                BodyText("Apple Home can't reach it right now. Check that it's plugged in and near your home hub.")
+            block(title: String(localized: "\(s.name) is out of reach", comment: "Onboarding, Apple Home screen: title; the placeholder is the sensor's name, e.g. ALPSTUGA")) {
+                BodyText(String(localized: "Apple Home can't reach it right now. Check that it's plugged in and near your home hub.", comment: "Onboarding, Apple Home screen: body when the sensor is unreachable"))
             }
         case .several(let sensors):
-            block(title: "Which sensor is yours?") {
-                BodyText("Kūki follows one sensor at a time. You can switch in Settings.")
+            block(title: String(localized: "Which sensor is yours?", comment: "Onboarding, Apple Home screen: title when several sensors were found")) {
+                BodyText(String(localized: "Kūki follows one sensor at a time. You can switch in Settings.", comment: "Onboarding, Apple Home screen: body when several sensors were found"))
                 VStack(spacing: 10) {
                     ForEach(sensors) { s in sensorRow(s) }
                 }
                 .padding(.top, 6)
             }
         case .noHome:
-            block(title: "Apple Home has no home yet") {
-                BodyText("Set up your home in the Home app first, then add the sensor. Kūki will notice it here.")
+            block(title: String(localized: "Apple Home has no home yet", comment: "Onboarding, Apple Home screen: title when Apple Home has no home set up")) {
+                BodyText(String(localized: "Set up your home in the Home app first, then add the sensor. Kūki will notice it here.", comment: "Onboarding, Apple Home screen: body when there is no home"))
             }
         case .noSensor:
-            block(title: "No air sensor in Apple Home yet") {
+            block(title: String(localized: "No air sensor in Apple Home yet", comment: "Onboarding, Apple Home screen: title when no sensor is in Apple Home")) {
                 VStack(alignment: .leading, spacing: 14) {
-                    guideRow("一", "Plug in your ALPSTUGA. It's ready to pair once it powers up.")
+                    guideRow("一", String(localized: "Plug in your ALPSTUGA. It's ready to pair once it powers up.", comment: "Onboarding, Apple Home screen: setup step 1"))
                     guideRow("二", platform == .mac
-                             ? "Add it with the Home app on your iPhone or iPad. This Mac will see it a moment later."
-                             : "In the Home app, tap + › Add Accessory, then scan the Matter code that came with the sensor.")
-                    guideRow("三", "Thread needs a home hub nearby: a HomePod mini, a HomePod (2nd generation), or an Apple TV 4K with Ethernet.")
+                             ? String(localized: "Add it with the Home app on your iPhone or iPad. This Mac will see it a moment later.", comment: "Onboarding, Apple Home screen: setup step 2 on Mac")
+                             : String(localized: "In the Home app, tap + › Add Accessory, then scan the Matter code that came with the sensor.", comment: "Onboarding, Apple Home screen: setup step 2. Add Accessory must match the Home app's own menu item in your language; Matter is a standard's name"))
+                    guideRow("三", String(localized: "Thread needs a home hub nearby: a HomePod mini, a HomePod (2nd generation), or an Apple TV 4K with Ethernet.", comment: "Onboarding, Apple Home screen: setup step 3. Thread is a wireless protocol; HomePod and Apple TV are product names"))
                 }
-                Text("Kūki will notice it as soon as it's added.")
+                Text("Kūki will notice it as soon as it's added.", comment: "Onboarding, Apple Home screen: footnote under the setup steps")
                     .font(.footnote)
                     .foregroundStyle(Ink.inkSoft)
             }
         case .denied:
-            block(title: "Kūki can't see Apple Home") {
+            block(title: String(localized: "Kūki can't see Apple Home", comment: "Onboarding, Apple Home screen: title when Home access was denied")) {
                 BodyText(EmptySensorView.homeAccessMessage)
             }
         }
@@ -189,7 +189,7 @@ struct AppleHomeScreen: View {
 
     private func found(_ s: SensorInfo, ppm: Double?) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            ScreenTitle(text: "There it is.")
+            ScreenTitle(text: String(localized: "There it is.", comment: "Onboarding, Apple Home screen: title when the sensor was found with a reading"))
             sensorLines(s)
             if let ppm {
                 let level = CO2Level(ppm: ppm)
@@ -197,9 +197,11 @@ struct AppleHomeScreen: View {
                     Text(level.kanji).font(Typeface.mincho(22)).foregroundStyle(level.color).accessibilityHidden(true)
                     Text(level.title).font(Typeface.title).foregroundStyle(Ink.ink)
                 }
-                BodyText(s.room.isEmpty ? "That's the air around your sensor right now." : "That's the air in \(s.room) right now.", ink: true)
+                BodyText(s.room.isEmpty
+                         ? String(localized: "That's the air around your sensor right now.", comment: "Onboarding, Apple Home screen: under the first live reading")
+                         : String(localized: "That's the air in \(s.room) right now.", comment: "Onboarding, Apple Home screen: under the first live reading; the placeholder is the room name from Apple Home"), ink: true)
             } else {
-                BodyText("This sensor doesn't report CO₂, so Kūki will show its other values.")
+                BodyText(String(localized: "This sensor doesn't report CO₂, so Kūki will show its other values.", comment: "Onboarding, Apple Home screen: body for a sensor without CO₂"))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -221,9 +223,10 @@ struct AppleHomeScreen: View {
         let ppm = fresh ?? snap?.co2
         var subtitle = OnboardingCopy.roomAndHome(room: s.room, home: s.home)
         if snap?.co2 == nil {
-            subtitle += subtitle.isEmpty ? "No CO₂ reading" : " · No CO₂ reading"
+            let none = String(localized: "No CO₂ reading", comment: "Onboarding, Apple Home screen: sensor list row detail, after the room and home")
+            subtitle += subtitle.isEmpty ? none : " · " + none
         } else if let fresh {
-            subtitle += " · \(Metric.co2.format(fresh)) ppm"
+            subtitle += " · " + String(localized: "\(Metric.co2.format(fresh)) ppm", comment: "A CO₂ value with its unit, e.g. 812 ppm. Keep ppm.")
         }
         let selected = (model.stagedSensor ?? recorder.homeKit.sensors.first?.id) == s.id
         return ChoiceRow(title: s.name, subtitle: subtitle, selected: selected, action: { model.stagedSensor = s.id }) {
@@ -248,9 +251,18 @@ struct AppleHomeScreen: View {
         }
     }
 
-    private func lastHeardText(_ s: SensorInfo) -> String {
-        guard let heard = recorder.homeKit.snapshots[s.id]?.lastHeard else { return "earlier" }
-        return heard.formatted(date: .omitted, time: .shortened)
+    private func foundTitle(_ s: SensorInfo) -> String {
+        String(localized: "Found \(s.name)", comment: "Onboarding, Apple Home screen: title; the placeholder is the sensor's name, e.g. ALPSTUGA")
+    }
+
+    private func lastReportedText(_ s: SensorInfo) -> String {
+        guard let heard = recorder.homeKit.snapshots[s.id]?.lastHeard else {
+            return String(localized: "Last reported earlier. Apple Home hasn't sent a new reading yet. It often arrives within a minute.",
+                          comment: "Onboarding, Apple Home screen: body when the sensor's last value is old and its time is unknown")
+        }
+        let time = heard.formatted(date: .omitted, time: .shortened)
+        return String(localized: "Last reported \(time). Apple Home hasn't sent a new reading yet. It often arrives within a minute.",
+                      comment: "Onboarding, Apple Home screen: body when the sensor's last value is old; the placeholder is a time of day, e.g. 14:05")
     }
 
     // MARK: Changes
@@ -261,14 +273,23 @@ struct AppleHomeScreen: View {
         announcedKind = state.kind
         let text: String?
         switch state {
-        case .waiting: text = "Looking for Apple Home."
-        case .slow: text = "Apple Home is taking its time."
+        case .waiting:
+            text = String(localized: "Looking for Apple Home.", comment: "Onboarding, Apple Home screen: VoiceOver announcement")
+        case .slow:
+            text = String(localized: "Apple Home is taking its time.", comment: "Onboarding, Apple Home screen: VoiceOver announcement")
         case .found(let s, let ppm, true):
-            let room = s.room.isEmpty ? "" : " in \(s.room)"
-            text = ppm.map { "Found \(s.name)\(room). \(Metric.co2.spoken($0)), \(CO2Level(ppm: $0).title)." } ?? "Found \(s.name)\(room)."
+            let found = s.room.isEmpty
+                ? String(localized: "Found \(s.name).", comment: "Onboarding, Apple Home screen: VoiceOver announcement; the placeholder is the sensor's name")
+                : String(localized: "Found \(s.name) in \(s.room).", comment: "Onboarding, Apple Home screen: VoiceOver announcement; the placeholders are the sensor's name and its room in Apple Home")
+            text = ppm.map {
+                String(localized: "\(found) \(Metric.co2.spoken($0)), \(CO2Level(ppm: $0).title).",
+                       comment: "Onboarding, Apple Home screen: VoiceOver announcement: the Found sentence, then the spoken CO₂ reading and the air level name")
+            } ?? found
             revealMotes()
-        case .noSensor: text = "No air sensor found in Apple Home."
-        case .denied: text = "Kūki can't see Apple Home."
+        case .noSensor:
+            text = String(localized: "No air sensor found in Apple Home.", comment: "Onboarding, Apple Home screen: VoiceOver announcement")
+        case .denied:
+            text = String(localized: "Kūki can't see Apple Home.", comment: "Onboarding, Apple Home screen: VoiceOver announcement")
         default: text = nil
         }
         if let text { AccessibilityNotification.Announcement(text).post() }
@@ -293,16 +314,19 @@ enum AppleHomeActions {
                         done: @escaping () -> Void, tryDemo: @escaping () -> Void)
         -> (primary: OnboardingAction?, secondary: [OnboardingAction]) {
         // A replay that's already on Apple Home offers no way into the demo.
-        let demo = model.offersDemo(recorder) ? [OnboardingAction(title: "Try the demo", run: tryDemo)] : []
-        let check = OnboardingAction(title: "Check again") { model.checkAgain(recorder) }
-        let doneTitle = model.mode == .sheet ? "Done" : "Continue"
+        let demo = model.offersDemo(recorder)
+            ? [OnboardingAction(title: String(localized: "Try the demo", comment: "Onboarding, Apple Home screen: text button; the demo is a simulated sensor (keep short)"), run: tryDemo)] : []
+        let check = OnboardingAction(title: String(localized: "Check again", comment: "Onboarding, Apple Home screen: button that asks Apple Home again (keep short)")) { model.checkAgain(recorder) }
+        let doneTitle = model.mode == .sheet
+            ? String(localized: "Done", comment: "Connect Apple Home sheet: primary button that closes the sheet (keep short)")
+            : String(localized: "Continue", comment: "Onboarding: primary button to the next screen (keep short)")
         let home = URL(string: "com.apple.home://")!
-        let openHome = OnboardingAction(title: "Open Home app") {
+        let openHome = OnboardingAction(title: String(localized: "Open Home app", comment: "Onboarding, Apple Home screen: button that opens Apple's Home app (keep short)")) {
             openURL(home) { accepted in if !accepted { model.homeAppFailed = true } }
         }
         switch state {
         case .notRequested:
-            return (OnboardingAction(title: "Continue") { model.connect(recorder) }, [])
+            return (OnboardingAction(title: String(localized: "Continue", comment: "Onboarding: primary button to the next screen (keep short)")) { model.connect(recorder) }, [])
         case .waiting:
             return (nil, [])
         case .slow:
@@ -315,7 +339,7 @@ enum AppleHomeActions {
         case .unreachable:
             return (OnboardingAction(title: doneTitle, run: done), [check])
         case .several(let sensors):
-            return (OnboardingAction(title: "Continue") {
+            return (OnboardingAction(title: String(localized: "Continue", comment: "Onboarding: primary button to the next screen (keep short)")) {
                 let id = model.stagedSensor ?? sensors.first?.id
                 model.chosenSensor = id
                 recorder.selectedSensorID = id
@@ -327,7 +351,7 @@ enum AppleHomeActions {
         case .noSensor:
             #if !targetEnvironment(macCatalyst)
             if !model.addAccessoryFailed {
-                let add = OnboardingAction(title: "Add Accessory…") {
+                let add = OnboardingAction(title: String(localized: "Add Accessory…", comment: "Onboarding, Apple Home screen: button that opens the system's add-accessory sheet; match the Home app's wording (keep short)")) {
                     Task {
                         do { try await recorder.homeKit.addAccessory() } catch {
                             // A cancelled sheet is a choice, not a failure.
@@ -343,7 +367,7 @@ enum AppleHomeActions {
         case .denied:
             #if !targetEnvironment(macCatalyst)
             if let settings = URL(string: UIApplication.openSettingsURLString) {
-                return (OnboardingAction(title: "Open Settings") { openURL(settings) }, demo)
+                return (OnboardingAction(title: String(localized: "Open Settings", comment: "Onboarding, Apple Home screen: button that opens the system Settings app (keep short)")) { openURL(settings) }, demo)
             }
             #endif
             return (nil, demo)

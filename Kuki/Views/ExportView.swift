@@ -18,7 +18,7 @@ struct ExportView: View {
                     .padding(.top, 12)
 
                 Picker("Period", selection: $range) {
-                    ForEach(ExportRange.allCases) { Text($0.title).tag($0) }
+                    ForEach(ExportRange.allCases) { Text(verbatim: $0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
 
@@ -33,12 +33,17 @@ struct ExportView: View {
                         ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
                         : AnyLayout(HStackLayout(spacing: 12))
                     pills {
-                        ShareLink(item: file(.markdown), preview: SharePreview("Kūki air log (Markdown)")) {
+                        ShareLink(item: file(.markdown),
+                                  preview: SharePreview(Text("Kūki air log (Markdown)", comment: "Export: title of the shared Markdown file in the share sheet"))) {
                             pill("Share file", systemImage: "doc.text")
                         }
                         .help("Share the Markdown brief as a file")
                         Button(action: copyMarkdown) {
-                            pill(copied ? "Copied" : "Copy text", systemImage: copied ? "checkmark" : "doc.on.doc")
+                            if copied {
+                                pill("Copied", systemImage: "checkmark")
+                            } else {
+                                pill("Copy text", systemImage: "doc.on.doc")
+                            }
                         }
                         .buttonStyle(QuietButtonStyle())
                         .disabled(copying)
@@ -52,7 +57,8 @@ struct ExportView: View {
                     title: "Spreadsheet (CSV)",
                     text: "Every sample at full resolution: time, place, CO₂, temperature, humidity, PM2.5, and whether the sensor was still settling after a move. Opens in Numbers, Excel or Google Sheets."
                 ) {
-                    ShareLink(item: file(.csv), preview: SharePreview("Kūki air log (CSV)")) {
+                    ShareLink(item: file(.csv),
+                              preview: SharePreview(Text("Kūki air log (CSV)", comment: "Export: title of the shared CSV file in the share sheet"))) {
                         pill("Share CSV", systemImage: "tablecells")
                     }
                     .help("Share every sample as a CSV file")
@@ -92,7 +98,8 @@ struct ExportView: View {
         }
     }
 
-    private func block<Content: View>(title: String, text: String, @ViewBuilder content: () -> Content) -> some View {
+    private func block<Content: View>(title: LocalizedStringKey, text: LocalizedStringKey,
+                                      @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title).font(Typeface.title).foregroundStyle(Ink.ink)
             Text(text).font(Typeface.body).foregroundStyle(Ink.inkSoft)
@@ -101,9 +108,11 @@ struct ExportView: View {
         }
     }
 
-    private func pill(_ title: String, systemImage: String) -> some View {
+    private func pill(_ title: LocalizedStringKey, systemImage: String) -> some View {
         Label(title, systemImage: systemImage)
             .font(.subheadline)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
             .foregroundStyle(Ink.ink)
             .padding(.horizontal, 18)
             .padding(.vertical, 10)
@@ -122,12 +131,21 @@ private struct ExportCount: View {
 
     @State private var counts: (samples: Int, places: Int)?
 
+    static func samples(_ n: Int) -> String {
+        String(localized: "\(n) samples", comment: "Export: number of recorded samples in the chosen period (small uppercase label)")
+    }
+
+    static func places(_ n: Int) -> String {
+        String(localized: "\(n) places", comment: "Export: number of rooms the samples come from (small uppercase label)")
+    }
+
     private struct LoadKey: Hashable { let range: ExportRange; let filter: SensorFilter; let refresh: Date? }
 
     var body: some View {
         Group {
             if let counts {
-                Text("\(counts.samples) samples · \(counts.places) place\(counts.places == 1 ? "" : "s")")
+                // Two counts, each with its own plural: a list, not a sentence.
+                Text(verbatim: "\(Self.samples(counts.samples)) · \(Self.places(counts.places))")
             } else {
                 Text("Counting…")
             }

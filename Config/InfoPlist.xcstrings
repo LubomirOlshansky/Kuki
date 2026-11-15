@@ -1,0 +1,164 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "CFBundleDisplayName" : {
+      "comment" : "App name under the icon. A proper name: do not translate.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Kūki"
+          }
+        }
+      },
+      "shouldTranslate" : false
+    },
+    "CFBundleName" : {
+      "comment" : "Bundle name. A proper name: do not translate.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Kuki"
+          }
+        }
+      },
+      "shouldTranslate" : false
+    },
+    "NSHomeKitUsageDescription" : {
+      "comment" : "Permission prompt shown when Kūki asks for Apple Home (HomeKit) access. Keep Kūki, CO₂ and Apple Home.",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يقرأ Kūki مستويات CO₂ ودرجة الحرارة والرطوبة والجسيمات من مستشعر جودة الهواء لديك في Apple Home."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kūki liest die CO₂-, Temperatur-, Luftfeuchte- und Partikelwerte Ihres Luftqualitätssensors in Apple Home."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Kūki reads the CO₂, temperature, humidity and particle levels from your air quality sensor in Apple Home."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kūki lee los niveles de CO₂, temperatura, humedad y partículas de tu sensor de calidad del aire en Apple Home."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kūki lit les niveaux de CO₂, de température, d'humidité et de particules de votre capteur de qualité de l'air dans Apple Home."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kūki, Apple Home में आपके एयर क्वालिटी सेंसर से CO₂, तापमान, आर्द्रता और कणों का स्तर पढ़ता है।"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kūki membaca kadar CO₂, suhu, kelembapan, dan partikel dari sensor kualitas udara Anda di Apple Home."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kūki legge i livelli di CO₂, temperatura, umidità e particelle dal tuo sensore di qualità dell'aria in Apple Home."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KūkiはApple Homeの空気質センサーから、CO₂、温度、湿度、粒子の値を読み取ります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kūki는 Apple Home의 공기질 센서에서 CO₂, 온도, 습도, 미세먼지 수치를 읽습니다."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kūki leest de CO₂-, temperatuur-, luchtvochtigheids- en fijnstofwaarden van je luchtkwaliteitssensor in Apple Home."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kūki odczytuje poziom CO₂, temperatury, wilgotności i pyłów z Twojego czujnika jakości powietrza w Apple Home."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Kūki lê os níveis de CO₂, temperatura, umidade e partículas do seu sensor de qualidade do ar no Apple Home."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kūki считывает уровни CO₂, температуры, влажности и частиц с Вашего датчика качества воздуха в Apple Home."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kūki läser av nivåerna av CO₂, temperatur, luftfuktighet och partiklar från din luftkvalitetssensor i Apple Home."
+          }
+        },
+        "th" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kūki อ่านค่า CO₂ อุณหภูมิ ความชื้น และระดับฝุ่นละอองจากเซ็นเซอร์คุณภาพอากาศของคุณใน Apple Home"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kūki, Apple Home'daki hava kalitesi sensörünüzden CO₂, sıcaklık, nem ve partikül düzeylerini okur."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kūki зчитує рівні CO₂, температури, вологості й частинок із вашого датчика якості повітря в Apple Home."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kūki đọc mức CO₂, nhiệt độ, độ ẩm và bụi mịn từ cảm biến chất lượng không khí của bạn trong Apple Home."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kūki 会从 Apple Home 中的空气质量传感器读取 CO₂、温度、湿度和颗粒物水平。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kūki 會從 Apple Home 中的空氣品質感測器讀取 CO₂、溫度、濕度和懸浮微粒數值。"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

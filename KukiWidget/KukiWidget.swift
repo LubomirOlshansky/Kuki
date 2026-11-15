@@ -61,8 +61,8 @@ struct AirWidget: Widget {
         StaticConfiguration(kind: WidgetSnapshot.widgetKind, provider: AirProvider()) { entry in
             AirWidgetView(entry: entry)
         }
-        .configurationDisplayName("Air")
-        .description("CO₂ where your sensor is, with temperature, humidity and the last few hours.")
+        .configurationDisplayName(Text("Air", comment: "Widget gallery: the widget's name (one short word: the air in a room)."))
+        .description(Text("CO₂ where your sensor is, with temperature, humidity and the last few hours.", comment: "Widget gallery: the widget's description."))
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }
@@ -111,7 +111,48 @@ private struct WidgetInk {
 
 /// Locale-aware "21.4" (or "21,4"): the decimal separator follows the reader's region. Shared with the Live Activity.
 func oneDecimal(_ v: Double) -> String {
-    v.formatted(.number.precision(.fractionLength(1)))
+    v.formatted(.number.precision(.fractionLength(1)).grouping(.never))
+}
+
+/// A whole reading in the reader's digits, never grouped: "742", "1234", "٧٤٢".
+func wholeNumber(_ v: Double) -> String {
+    Int(v.rounded()).formatted(.number.grouping(.never))
+}
+
+/// Locale-aware "47%" ("47 %" in French, "%47" in Turkish).
+func percentText(_ v: Double) -> String {
+    (v.rounded() / 100).formatted(.percent.precision(.fractionLength(0)).grouping(.never))
+}
+
+/// "Last reading": shown instead of the level title once a reading is old.
+var lastReadingTitle: String {
+    String(localized: "Last reading", comment: "Widget and Live Activity: replaces the air level title when the reading is old (no new reading for 30 minutes). Keep short.")
+}
+
+/// VoiceOver for the widget and the Live Activity: independent clauses,
+/// each translated whole, read as a comma-separated list.
+enum AirSpeech {
+    static func co2(_ ppm: Double) -> String {
+        String(localized: "CO₂ \(wholeNumber(ppm)) parts per million", comment: "VoiceOver (widget, Live Activity): the CO₂ reading. %@ = number.")
+    }
+    static func temperature(_ t: Double) -> String {
+        String(localized: "temperature \(oneDecimal(t)) degrees", comment: "VoiceOver (widget, Live Activity): a clause after the CO₂ reading, lowercase in English. %@ = number.")
+    }
+    static func humidity(_ h: Double) -> String {
+        String(localized: "humidity \(wholeNumber(h)) percent", comment: "VoiceOver (widget, Live Activity): a clause after the CO₂ reading, lowercase in English. %@ = number.")
+    }
+    static func pm25(_ p: Double) -> String {
+        String(localized: "PM2.5 \(wholeNumber(p)) micrograms per cubic metre", comment: "VoiceOver (widget): fine-particle reading clause. %@ = number. Keep PM2.5.")
+    }
+    static var lastReading: String {
+        String(localized: "last reading", comment: "VoiceOver (widget, Live Activity): clause saying the value shown is the last one heard, not live. Lowercase in English.")
+    }
+    static var notLive: String {
+        String(localized: "last reading, not live", comment: "VoiceOver (widget): clause at the end saying the value is old, not live. Lowercase in English.")
+    }
+    static func list(_ clauses: [String]) -> String {
+        clauses.joined(separator: String(localized: ", ", comment: "VoiceOver: separator between clauses of a spoken reading (comma and space). Use your language's comma."))
+    }
 }
 
 /// "12 min ago" — only shown when the reading isn't fresh enough to be
@@ -120,10 +161,11 @@ private struct AgeLabel: View {
     let s: WidgetSnapshot
     @Environment(\.widgetRenderingMode) private var renderingMode
     var body: some View {
-        (Text(s.measuredAt, style: .relative) + Text(" ago"))
+        Text("\(s.measuredAt, style: .relative) ago", comment: "Widget: how old the last reading is. %@ = a relative duration such as '12 min'. Very small space.")
             .font(.caption2)
             .foregroundStyle(WidgetInk(renderingMode).soft)
             .lineLimit(1)
+            .minimumScaleFactor(0.8)
     }
 }
 
@@ -146,14 +188,14 @@ private struct EnsoReading: View {
                      lineWidth: lineWidth, animated: false)
                 .widgetAccentable()
             VStack(spacing: 0) {
-                Text(String(Int(co2.rounded())))
+                Text(verbatim: wholeNumber(co2))
                     // Ultralight, one step heavier with Bold Text — as in the app.
                     .font(Typeface.numeral(numberSize, bold: legibilityWeight == .bold))
                     .foregroundStyle(stale ? tone.soft : tone.ink)
                     .minimumScaleFactor(0.6)
                     .lineLimit(1)
                 // Never below 11 pt, the floor for any widget text.
-                Text("ppm").font(.system(size: max(11, numberSize * 0.22))).tracking(1.2)
+                Text(verbatim: "ppm").font(.system(size: max(11, numberSize * 0.22))).tracking(1.2)
                     .foregroundStyle(tone.soft)
             }
             .padding(lineWidth * 2)
@@ -204,21 +246,24 @@ private struct MediumAir: View {
                     Text(level.kanji).font(.custom("HiraMinProN-W3", size: 17))
                         .foregroundStyle(stale ? tone.soft : tone.pigment(level.color))
                         .widgetAccentable()
-                    Text(stale ? "Last reading" : level.title).font(.subheadline).foregroundStyle(tone.ink)
+                    Text(stale ? lastReadingTitle : level.title).font(.subheadline).foregroundStyle(tone.ink)
+                        .lineLimit(1).minimumScaleFactor(0.75)
                     Spacer(minLength: 0)
                 }
                 Sparkline(values: s.recentCO2, limit: s.limit)
                     .stroke(stale ? tone.faint : tone.ink, style: StrokeStyle(lineWidth: 1.2, lineCap: .round, lineJoin: .round))
                     .frame(height: 30)
+                    // Time runs left to right in every language.
+                    .environment(\.layoutDirection, .leftToRight)
                 HStack(spacing: 12) {
                     small(s.temperature.map { oneDecimal($0) + "°" }, tone) {
                         Image(systemName: "thermometer.medium")
                     }
-                    small(s.humidity.map { $0.formatted(.number.precision(.fractionLength(0))) + "%" }, tone) {
+                    small(s.humidity.map { percentText($0) }, tone) {
                         Image(systemName: "humidity")
                     }
-                    small(s.pm25.map { $0.formatted(.number.precision(.fractionLength(0))) }, tone) {
-                        Text("PM2.5")
+                    small(s.pm25.map { wholeNumber($0) }, tone) {
+                        Text(verbatim: "PM2.5")
                     }
                 }
                 .lineLimit(1)
@@ -269,14 +314,14 @@ private struct CircularAir: View {
     let stale: Bool
     var body: some View {
         Gauge(value: min(max(co2, 400), 2000), in: 400...2000) {
-            Text("CO₂")
+            Text(verbatim: "CO₂")
         } currentValueLabel: {
-            Text(String(Int(co2.rounded()))).monospacedDigit()
+            Text(verbatim: wholeNumber(co2)).monospacedDigit()
         }
         .gaugeStyle(.accessoryCircular)
         .opacity(stale ? 0.5 : 1)
         .widgetAccentable()
-        .accessibilityLabel("CO₂ \(Int(co2.rounded())) parts per million\(stale ? ", last reading" : "")")
+        .accessibilityLabel(AirSpeech.list([AirSpeech.co2(co2)] + (stale ? [AirSpeech.lastReading] : [])))
     }
 }
 
@@ -287,8 +332,10 @@ private struct RectangularAir: View {
     var body: some View {
         let level = CO2Level(ppm: co2)
         VStack(alignment: .leading, spacing: 1) {
-            Text("CO₂ \(Int(co2.rounded())) ppm").font(.headline).widgetAccentable()
-            Text(stale ? "Last reading" : level.title).font(.caption)
+            Text(verbatim: "CO₂ \(wholeNumber(co2)) ppm").font(.headline).widgetAccentable()
+                .lineLimit(1).minimumScaleFactor(0.8)
+            Text(stale ? lastReadingTitle : level.title).font(.caption)
+                .lineLimit(1).minimumScaleFactor(0.8)
             if stale {
                 AgeLabel(s: s)
             } else {
@@ -303,7 +350,11 @@ private struct InlineAir: View {
     let co2: Double
     let stale: Bool
     var body: some View {
-        Text("CO₂ \(Int(co2.rounded())) ppm\(stale ? " · old" : "")")
+        if stale {
+            Text("CO₂ \(wholeNumber(co2)) ppm · old", comment: "Lock Screen inline widget (one short line next to the date) when the reading is old. %@ = CO₂ number. Keep CO₂ and ppm; 'old' must be very short.")
+        } else {
+            Text(verbatim: "CO₂ \(wholeNumber(co2)) ppm")
+        }
     }
 }
 
@@ -314,13 +365,15 @@ private struct EmptyAir: View {
         let tone = WidgetInk(renderingMode)
         switch family {
         case .accessoryCircular, .accessoryInline, .accessoryRectangular:
-            Text("Open Kūki")
+            Text("Open Kūki", comment: "Lock Screen widget before any reading exists (very small space: a small circle or one line). Keep very short.")
+                .minimumScaleFactor(0.6)
         default:
             VStack(spacing: 8) {
                 EnsoRing(fraction: 0.08, color: tone.faint, lineWidth: 5, animated: false)
                     .frame(width: 54, height: 54)
                     .widgetAccentable()
-                Text("Open Kūki to start reading the air.")
+                Text("Open Kūki to start reading the air.", comment: "Home Screen widget before any reading exists (small widget, under an empty ensō).")
+                    .minimumScaleFactor(0.8)
                     .font(.caption)
                     .foregroundStyle(tone.soft)
                     .multilineTextAlignment(.center)
@@ -332,17 +385,18 @@ private struct EmptyAir: View {
 private extension View {
     func widgetAccessibility(s: WidgetSnapshot, co2: Double, stale: Bool, withMetrics: Bool = false) -> some View {
         let level = CO2Level(ppm: co2)
-        var label = "CO₂ \(Int(co2.rounded())) parts per million, \(level.title)"
+        var clauses = [AirSpeech.co2(co2), level.title]
         if withMetrics {
-            // "Temperature 21.4 degrees, humidity 47 percent, PM2.5 6 micrograms per cubic metre"
-            if let t = s.temperature { label += ", temperature \(oneDecimal(t)) degrees" }
-            if let h = s.humidity { label += ", humidity \(Int(h.rounded())) percent" }
-            if let p = s.pm25 { label += ", PM2.5 \(Int(p.rounded())) micrograms per cubic metre" }
+            // "temperature 21.4 degrees, humidity 47 percent, PM2.5 6 micrograms per cubic metre"
+            if let t = s.temperature { clauses.append(AirSpeech.temperature(t)) }
+            if let h = s.humidity { clauses.append(AirSpeech.humidity(h)) }
+            if let p = s.pm25 { clauses.append(AirSpeech.pm25(p)) }
         }
-        label += ", \(s.placeName)\(stale ? ", last reading, not live" : "")"
+        clauses.append(s.placeName)
+        if stale { clauses.append(AirSpeech.notLive) }
         return self
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(label)
+            .accessibilityLabel(AirSpeech.list(clauses))
     }
 }
 

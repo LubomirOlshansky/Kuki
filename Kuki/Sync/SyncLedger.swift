@@ -164,6 +164,11 @@ struct PlaceSnapshot: Equatable, Sendable {
 /// winner's id, and its origin device writes a tombstone `mergedInto` the
 /// winner. Places from the same device never merge (two "Bedroom"s made on
 /// one device are deliberate), and renames never merge (only first sight).
+///
+/// "Same name" includes the same *seeded* place in another language: a
+/// German device's untouched "Wohnzimmer" 居間 is an English device's
+/// "Living room" 居間 (`SeedNames` has the rule). Same winner, same
+/// tombstone, same re-filing — only the match is wider.
 enum PlaceResolver {
     enum Decision: Equatable {
         /// New place: add it.
@@ -190,8 +195,9 @@ enum PlaceResolver {
     /// - Parameters:
     ///   - local: our copy of the same id (live or tombstone), if any.
     ///   - livePlaces: every live local place (to find a same-named twin).
+    ///   - seeds: the seeded places' names in every language.
     static func resolve(remote: PlaceSnapshot, local: PlaceSnapshot?, livePlaces: [PlaceSnapshot],
-                        localDeviceID: String) -> Decision {
+                        localDeviceID: String, seeds: SeedNames = .bundled) -> Decision {
         if let local {
             if local.mergedInto != nil { return .ignore }
             return remote.modifiedAt > local.modifiedAt ? .applyRemote : .keepLocal
@@ -199,8 +205,14 @@ enum PlaceResolver {
         if remote.deleted { return .rememberTombstone }
         let remoteOrigin = remote.originDeviceID ?? ""
         let key = normalized(remote.name)
+        let seed = seeds.identity(name: remote.name, kanji: remote.kanji)
+        func same(_ p: PlaceSnapshot) -> Bool {
+            if normalized(p.name) == key { return true }
+            guard let seed else { return false }
+            return seeds.identity(name: p.name, kanji: p.kanji) == seed
+        }
         let twin = livePlaces
-            .filter { !$0.deleted && $0.id != remote.id && normalized($0.name) == key
+            .filter { !$0.deleted && $0.id != remote.id && same($0)
                 && ($0.originDeviceID ?? localDeviceID) != remoteOrigin }
             .min { older($0, than: $1) }
         guard let twin else { return .insert }

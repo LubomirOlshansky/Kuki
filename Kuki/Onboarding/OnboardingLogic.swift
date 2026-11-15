@@ -77,8 +77,13 @@ enum OnboardingPreselect {
             return .newPlace(name: room)
         }
         let goals = goals ?? []
-        if goals.contains(.sleep), let bedroom = named("Bedroom") { return .existing(bedroom.id) }
-        if goals.contains(.focus), let study = named("Study") { return .existing(study.id) }
+        // Seeded rooms are named in the language they were made in; their
+        // kanji is the same in every language.
+        func seeded(_ english: String, kanji: String) -> PlaceRef? {
+            named(english) ?? sorted.first { $0.kanji == kanji }
+        }
+        if goals.contains(.sleep), let bedroom = seeded("Bedroom", kanji: "寝室") { return .existing(bedroom.id) }
+        if goals.contains(.focus), let study = seeded("Study", kanji: "書斎") { return .existing(study.id) }
         if let current, sorted.contains(where: { $0.id == current }) { return .existing(current) }
         return sorted.first.map { .existing($0.id) }
     }
@@ -137,6 +142,20 @@ struct PlanLine: Equatable {
     var key: String?
 }
 
+extension PlanLine {
+    /// A line whose key is marked in its (localized) text: "Start in **the
+    /// Bedroom**." → text "Start in the Bedroom.", key "the Bedroom". The
+    /// markers travel with the translation, so the key always matches.
+    init(marked: String) {
+        let parts = marked.components(separatedBy: "**")
+        if parts.count >= 3 {
+            self.init(text: parts.joined(), key: parts[1].isEmpty ? nil : parts[1])
+        } else {
+            self.init(text: marked, key: nil)
+        }
+    }
+}
+
 enum OnboardingPlan {
     static func lines(_ input: PlanInput) -> [PlanLine] {
         var out: [PlanLine] = []
@@ -144,61 +163,68 @@ enum OnboardingPlan {
 
         if let name = input.placeName {
             // The reminder's rule too: "the Bedroom", but "Mum's room".
-            let place = Place.isSeeded(name) ? "the \(name)" : name
+            let marked = "**\(name)**"
+            let place = Place.isSeeded(name)
+                ? String(localized: "the \(marked)", comment: "A seeded room name used inside a sentence, e.g. 'the Bedroom'. Translate as just the placeholder if your language uses no article here.")
+                : marked
             if input.demo {
-                out.append(PlanLine(text: "The demo sensor starts in \(place). Connect a real one any time in Settings.",
-                                    key: name))
+                out.append(PlanLine(marked: String(localized: "The demo sensor starts in \(place). Connect a real one any time in Settings.",
+                                                   comment: "Onboarding, Plan screen: the placeholder is a room name (may include an article, e.g. 'the Bedroom'). The demo is a simulated sensor.")))
+            } else if input.placeKanji.isEmpty {
+                out.append(PlanLine(marked: String(localized: "Start in \(place). Move the sensor any time from the Now screen.",
+                                                   comment: "Onboarding, Plan screen: the placeholder is a room name (may include an article, e.g. 'the Bedroom'). Now = the app's main tab.")))
             } else {
-                let kanji = input.placeKanji.isEmpty ? "" : " (\(input.placeKanji))"
-                out.append(PlanLine(text: "Start in \(place)\(kanji). Move the sensor any time from the Now screen.",
-                                    key: name))
+                let kanji = input.placeKanji
+                out.append(PlanLine(marked: String(localized: "Start in \(place) (\(kanji)). Move the sensor any time from the Now screen.",
+                                                   comment: "Onboarding, Plan screen: the first placeholder is a room name (may include an article, e.g. 'the Bedroom'), the second its decorative kanji, e.g. 寝室 (do not translate). Now = the app's main tab.")))
             }
         }
 
         switch input.habit {
         case .rarely:
-            out.append(PlanLine(text: "Air out a few times a day: windows wide for a few minutes, about 3–5 in winter, 10–20 in summer.",
-                                key: "windows wide for a few minutes"))
+            out.append(PlanLine(marked: String(localized: "Air out a few times a day: **windows wide for a few minutes**, about 3–5 in winter, 10–20 in summer.", comment: "Onboarding, Plan screen: plan line for people who rarely air their rooms; the numbers are minutes. The text between ** and ** is set in a heavier weight; keep the two ** markers around the matching words.")))
         case .onceADay where input.goals.contains(.sleep):
             // BedroomModel: two sleepers take a fresh closed bedroom past
             // 1000 ppm in about 50 min (OnboardingTests pins it under 60).
-            out.append(PlanLine(text: "Add a second airing before bed. With two people asleep, a closed bedroom can refill in under an hour.",
-                                key: "a second airing before bed"))
+            out.append(PlanLine(marked: String(localized: "Add **a second airing before bed**. With two people asleep, a closed bedroom can refill in under an hour.", comment: "Onboarding, Plan screen: plan line for people who air once a day and care about sleep; refill = with exhaled CO₂. The text between ** and ** is set in a heavier weight; keep the two ** markers around the matching words.")))
         case .onceADay:
-            out.append(PlanLine(text: "Add a second, short airing in the afternoon.", key: "a second, short airing"))
+            out.append(PlanLine(marked: String(localized: "Add **a second, short airing** in the afternoon.", comment: "Onboarding, Plan screen: plan line for people who air once a day. The text between ** and ** is set in a heavier weight; keep the two ** markers around the matching words.")))
         case .severalTimes:
-            out.append(PlanLine(text: "You already air often. Kūki will show which room needs it most.",
-                                key: "You already air often."))
+            out.append(PlanLine(marked: String(localized: "**You already air often.** Kūki will show which room needs it most.", comment: "Onboarding, Plan screen: plan line for people who air several times a day. The text between ** and ** is set in a heavier weight; keep the two ** markers around the matching words.")))
         case .windowUsuallyOpen:
-            out.append(PlanLine(text: "When it's cold, a few wide-open minutes beat a window tilted all day: fresher, and warmer.",
-                                key: "a few wide-open minutes"))
+            out.append(PlanLine(marked: String(localized: "When it's cold, **a few wide-open minutes** beat a window tilted all day: fresher, and warmer.", comment: "Onboarding, Plan screen: plan line for people whose window is usually tilted open. The text between ** and ** is set in a heavier weight; keep the two ** markers around the matching words.")))
         case nil:
             break
         }
 
         var alert: String
         if !input.soundOn && !input.notifyOn {
-            alert = "No chime or notification. The ensō turns shu at \(limit) ppm."
+            alert = String(localized: "No chime or notification. The ensō turns shu at **\(limit) ppm**.",
+                           comment: "Onboarding, Plan screen: the placeholder is the CO₂ limit, e.g. 1000. Ensō = the Zen brush circle that shows CO₂, keep the word. Shu = the app's Japanese vermilion alert colour, keep the word. The text between ** and ** is set in a heavier weight; keep the two ** markers around the matching words.")
+        } else if input.notifyOn {
+            alert = String(localized: "The fūrin rings at **\(limit) ppm** and a notification follows.",
+                           comment: "Onboarding, Plan screen: the placeholder is the CO₂ limit, e.g. 1000. Fūrin = the Japanese wind chime the app plays as its alert, keep the word. The text between ** and ** is set in a heavier weight; keep the two ** markers around the matching words.")
         } else {
-            alert = "The fūrin rings at \(limit) ppm" + (input.notifyOn ? " and a notification follows." : ".")
+            alert = String(localized: "The fūrin rings at **\(limit) ppm**.",
+                           comment: "Onboarding, Plan screen: the placeholder is the CO₂ limit, e.g. 1000. Fūrin = the Japanese wind chime the app plays as its alert, keep the word. The text between ** and ** is set in a heavier weight; keep the two ** markers around the matching words.")
         }
-        if input.limit == 800 && input.goals.contains(.sleep) { alert += " A gentle line for sleep." }
-        out.append(PlanLine(text: alert, key: "\(limit) ppm"))
+        if input.limit == 800 && input.goals.contains(.sleep) {
+            alert = String(localized: "\(alert) A gentle line for sleep.",
+                           comment: "Onboarding, Plan screen: appended when the user chose the low 800 ppm limit for sleep; the placeholder is the previous sentence. Line = the CO₂ limit.")
+        }
+        out.append(PlanLine(marked: alert))
 
         switch input.platform {
         case .iPhone, .iPad:
-            out.append(PlanLine(text: "Kūki records while it's open. For a full night, try Station Mode on a spare device.",
-                                key: "Station Mode"))
+            out.append(PlanLine(marked: String(localized: "Kūki records while it's open. For a full night, try **Station Mode** on a spare device.", comment: "Onboarding, Plan screen: plan line on iPhone and iPad. Station Mode = the app's always-on screen mode, use the same name as in Settings. The text between ** and ** is set in a heavier weight; keep the two ** markers around the matching words.")))
         case .mac where input.showInDock:
-            out.append(PlanLine(text: "With a Dock icon, Kūki records only while it's in front. Settings › Show in Dock changes that.",
-                                key: "only while it's in front"))
+            out.append(PlanLine(marked: String(localized: "With a Dock icon, Kūki records **only while it's in front**. Settings › Show in Dock changes that.", comment: "Onboarding, Plan screen: plan line on Mac. Settings › Show in Dock is a path to a setting, use the same names as in Settings. The text between ** and ** is set in a heavier weight; keep the two ** markers around the matching words.")))
         case .mac:
-            out.append(PlanLine(text: "This Mac records around the clock from the menu bar.", key: "around the clock"))
+            out.append(PlanLine(marked: String(localized: "This Mac records **around the clock** from the menu bar.", comment: "Onboarding, Plan screen: plan line on Mac. The text between ** and ** is set in a heavier weight; keep the two ** markers around the matching words.")))
         }
 
         if input.cloudAvailable && !input.cloudOn {
-            out.append(PlanLine(text: "Using Kūki on more than one device? iCloud Sync in Settings shares one history.",
-                                key: "iCloud Sync"))
+            out.append(PlanLine(marked: String(localized: "Using Kūki on more than one device? **iCloud Sync** in Settings shares one history.", comment: "Onboarding, Plan screen: plan line. iCloud Sync is the name of a setting, use the same name as in Settings. The text between ** and ** is set in a heavier weight; keep the two ** markers around the matching words.")))
         }
         return out
     }
@@ -283,11 +309,11 @@ enum OnboardingCopy {
     /// The note under the dial, by band.
     static func bandNote(ppm: Double) -> String {
         switch ppm {
-        case ..<800: "Close to outdoor air."
-        case ..<1000: "Comfortable. Kūki starts suggesting a window."
-        case ..<1400: "Above the line Germany's Umweltbundesamt calls harmless."
-        case ..<2000: "Well past the line. Open a window wide."
-        default: "The Umweltbundesamt calls this unacceptable."
+        case ..<800: String(localized: "Close to outdoor air.", comment: "Onboarding, Breath screen: note under the CO₂ dial, under 800 ppm")
+        case ..<1000: String(localized: "Comfortable. Kūki starts suggesting a window.", comment: "Onboarding, Breath screen: note under the CO₂ dial, 800–1000 ppm")
+        case ..<1400: String(localized: "Above the line Germany's Umweltbundesamt calls harmless.", comment: "Onboarding, Breath screen: note under the CO₂ dial, 1000–1400 ppm. Umweltbundesamt = German Environment Agency, keep the name")
+        case ..<2000: String(localized: "Well past the line. Open a window wide.", comment: "Onboarding, Breath screen: note under the CO₂ dial, 1400–2000 ppm")
+        default: String(localized: "The Umweltbundesamt calls this unacceptable.", comment: "Onboarding, Breath screen: note under the CO₂ dial, over 2000 ppm. Umweltbundesamt = German Environment Agency, keep the name")
         }
     }
 
@@ -295,20 +321,31 @@ enum OnboardingCopy {
     static func guessReply(_ guess: BedroomGuess?, morning: Double) -> String {
         let value = Metric.co2.format((morning / 10).rounded() * 10)
         switch guess {
-        case .p2000: return "Close: about \(value) ppm."
-        case .p4000: return "Lower than that: about \(value) ppm. Air leaks in even with the window shut."
-        case .p600, .p1000: return "Most people guess lower: about \(value) ppm."
-        case nil: return "About \(value) ppm by morning."
+        case .p2000:
+            return String(localized: "Close: about \(value) ppm.",
+                          comment: "Onboarding, Night screen: reply to the user's guess of bedroom CO₂ by morning (they guessed 2000); the placeholder is the modelled value")
+        case .p4000:
+            return String(localized: "Lower than that: about \(value) ppm. Air leaks in even with the window shut.",
+                          comment: "Onboarding, Night screen: reply to the user's guess of bedroom CO₂ by morning (they guessed 4000); the placeholder is the modelled value")
+        case .p600, .p1000:
+            return String(localized: "Most people guess lower: about \(value) ppm.",
+                          comment: "Onboarding, Night screen: reply to the user's low guess of bedroom CO₂ by morning; the placeholder is the modelled value")
+        case nil:
+            return String(localized: "About \(value) ppm by morning.",
+                          comment: "Onboarding, Night screen: modelled bedroom CO₂ by morning when no guess was made; the placeholder is a number")
         }
     }
 
     /// "Past 1000 ppm after about 50 min." — rounded to 5 minutes.
     static func closedReadout(sleepers: Int) -> String {
         guard let minutes = BedroomModel.minutesToReach(1000, sleepers: sleepers), minutes <= 8 * 60 else {
-            return "Stays under 1000 ppm all night."
+            return String(localized: "Stays under 1000 ppm all night.",
+                          comment: "Onboarding, Night screen: readout for a closed bedroom that never reaches 1000 ppm")
         }
         let rounded = max(5, Int((minutes / 5).rounded()) * 5)
-        return "Past 1000 ppm after about \(rounded) min."
+        let duration = Duration.seconds(rounded * 60).formatted(.units(allowed: [.minutes], width: .abbreviated))
+        return String(localized: "Past 1000 ppm after about \(duration).",
+                      comment: "Onboarding, Night screen: readout for a closed bedroom; the placeholder is a short duration such as 50 min")
     }
 
     /// "{room} · {home}", dropping empty parts.

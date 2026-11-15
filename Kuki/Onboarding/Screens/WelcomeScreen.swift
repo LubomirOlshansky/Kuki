@@ -25,7 +25,7 @@ struct WelcomeScreen: View {
                 if showRing {
                     EnsoRing(fraction: 0.86, color: Ink.ink, lineWidth: 12, paintToken: "welcome", memory: memory)
                 }
-                Text("空気")
+                Text(verbatim: "空気")
                     .font(Typeface.mincho(40))
                     .foregroundStyle(Ink.inkSoft)
                     .opacity(showKanji ? 1 : 0)
@@ -39,13 +39,13 @@ struct WelcomeScreen: View {
                         .transition(.inkDiffuseOrFade(reduceMotion: reduceMotion))
                 }
                 if showWords >= 2 {
-                    Text("How fresh is the air in this room?")
+                    Text("How fresh is the air in this room?", comment: "Onboarding, Welcome screen: subtitle under the app name")
                         .font(Typeface.title)
                         .foregroundStyle(Ink.ink)
                         .transition(.inkDiffuseOrFade(reduceMotion: reduceMotion))
                 }
                 if showWords >= 3 {
-                    BodyText("A few minutes on why air matters, then we'll find your sensor.")
+                    BodyText(String(localized: "A few minutes on why air matters, then we'll find your sensor.", comment: "Onboarding, Welcome screen: body line"))
                         .padding(.top, 4)
                         .transition(.inkDiffuseOrFade(reduceMotion: reduceMotion))
                 }

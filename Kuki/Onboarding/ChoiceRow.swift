@@ -63,7 +63,7 @@ struct ChoiceRow<Trailing: View>: View {
         .buttonStyle(QuietButtonStyle())
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(selected ? [.isSelected] : [])
-        .accessibilityHint(multiSelect ? "Double-tap to choose. You can choose several." : "")
+        .accessibilityHint(multiSelect ? String(localized: "Double-tap to choose. You can choose several.", comment: "Onboarding: VoiceOver hint on a multiple-choice answer") : "")
         .animation(.easeOut(duration: 0.18), value: selected)
     }
 }

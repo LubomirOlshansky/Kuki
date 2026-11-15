@@ -50,7 +50,9 @@ struct OnboardingFlow: View {
         let ax = dynamicTypeSize.isAccessibilitySize
         return VStack(spacing: 0) {
             OnboardingTopBar(model: model, showBack: showsBack(model), showSkip: showsSkip(model),
-                             skipTitle: mode == .replay ? "Close" : "Skip",
+                             skipTitle: mode == .replay
+                                ? String(localized: "Close", comment: "Onboarding replay, top bar: closes the introduction without saving (keep short)")
+                                : String(localized: "Skip", comment: "Onboarding, top bar: finishes the introduction now (keep short)"),
                              escapeSkips: mode == .replay,
                              back: { model.back(reduceMotion: reduceMotion) },
                              skip: { skip(model) })
@@ -198,20 +200,24 @@ struct OnboardingFlow: View {
         let next = { model.next(reduceMotion: reduceMotion) }
         switch model.step {
         case .welcome:
-            return (OnboardingAction(title: "Begin", run: next), [])
+            return (OnboardingAction(title: String(localized: "Begin", comment: "Onboarding, Welcome screen: primary button that starts the introduction (keep short)"), run: next), [])
         case .questions, .breath, .place, .furin:
-            return (OnboardingAction(title: "Continue", run: next), [])
+            return (OnboardingAction(title: String(localized: "Continue", comment: "Onboarding: primary button to the next screen (keep short)"), run: next), [])
         case .night:
             return (OnboardingAction(title: model.nightPrimaryTitle) { model.nightPrimary(reduceMotion: reduceMotion) }, [])
         case .listen:
             let connected = recorder.homeKitRequested && !recorder.useDemo
-            let primary = OnboardingAction(title: mode == .replay && connected ? "Continue" : "Connect Apple Home") {
+            let primary = OnboardingAction(title: mode == .replay && connected
+                ? String(localized: "Continue", comment: "Onboarding: primary button to the next screen (keep short)")
+                : String(localized: "Connect Apple Home", comment: "Onboarding, Listen screen: primary button (keep short)")) {
                 model.demo = false
                 model.next(reduceMotion: reduceMotion)
             }
             // A replay that's already on Apple Home offers no way into the demo.
             guard model.offersDemo(recorder) else { return (primary, []) }
-            let demoTitle = mode == .replay && recorder.useDemo ? "Continue with the demo" : "No sensor yet? Try the demo"
+            let demoTitle = mode == .replay && recorder.useDemo
+                ? String(localized: "Continue with the demo", comment: "Onboarding replay, Listen screen: text button; the demo is a simulated sensor")
+                : String(localized: "No sensor yet? Try the demo", comment: "Onboarding, Listen screen: text button; the demo is a simulated sensor")
             return (primary, [OnboardingAction(title: demoTitle) { model.tryDemo(recorder, reduceMotion: reduceMotion) }])
         case .appleHome:
             return AppleHomeActions.actions(
@@ -222,7 +228,7 @@ struct OnboardingFlow: View {
                 },
                 tryDemo: { model.tryDemo(recorder, reduceMotion: reduceMotion) })
         case .plan:
-            return (OnboardingAction(title: "Begin") {
+            return (OnboardingAction(title: String(localized: "Begin", comment: "Onboarding, Plan screen: final button that finishes the introduction (keep short)")) {
                 finish(model, commit: true)
                 OnboardingAnalytics.completed(
                     answers: model.draft.answers, demo: recorder.useDemo,
@@ -273,7 +279,10 @@ private struct OnboardingTopBar: View {
                 Button(action: back) {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.backward").font(.body.weight(.medium))
-                        if !dynamicTypeSize.isAccessibilitySize { Text("Back") }
+                        if !dynamicTypeSize.isAccessibilitySize {
+                            Text("Back", comment: "Onboarding, top bar: goes to the previous screen (keep short)")
+                                .lineLimit(1).minimumScaleFactor(0.7)
+                        }
                     }
                     .font(.subheadline)
                     .foregroundStyle(Ink.inkSoft)
@@ -285,12 +294,14 @@ private struct OnboardingTopBar: View {
                 .opacity(showBack ? 1 : 0)
                 .disabled(!showBack)
                 .accessibilityHidden(!showBack)
-                .accessibilityLabel("Back")
+                .accessibilityLabel(Text("Back", comment: "Onboarding, top bar: goes to the previous screen (keep short)"))
                 .accessibilitySortPriority(-1)
                 Spacer()
                 Button(action: skip) {
                     Text(skipTitle)
                         .font(.subheadline)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                         .foregroundStyle(Ink.inkSoft)
                         .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
@@ -321,7 +332,7 @@ private struct ProgressDashes: View {
     var body: some View {
         Group {
             if dynamicTypeSize.isAccessibilitySize {
-                Text("\(current + 1) of \(count)").kukiLabel()
+                Text("\(current + 1) of \(count)", comment: "Onboarding progress at large text sizes: current step of total steps").kukiLabel()
             } else {
                 let gap: CGFloat = 6
                 let width = min(22, (200 - gap * CGFloat(count - 1)) / CGFloat(count))
@@ -340,7 +351,7 @@ private struct ProgressDashes: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Step \(current + 1) of \(count)")
+        .accessibilityLabel(Text("Step \(current + 1) of \(count)", comment: "Onboarding progress, VoiceOver: current step of total steps"))
         .accessibilitySortPriority(10)
     }
 }

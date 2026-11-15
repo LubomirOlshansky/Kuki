@@ -80,6 +80,9 @@ struct EnsoRing: View {
             }
             .opacity((lifted ? 0 : 1) * (1 - 0.45 * min(1, max(0, wetness))))
         }
+        // The ensō is a calligraphic mark and a clockwise gauge: drawn the
+        // same way in every language, so right-to-left layout doesn't mirror it.
+        .environment(\.layoutDirection, .leftToRight)
         .animation(reduceMotion || !animated ? nil : fractionAnimation, value: fraction)
         .animation(animated ? colorAnimation : nil, value: color)
         .animation(animated ? .easeInOut(duration: 1.5) : nil, value: wetness)

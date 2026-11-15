@@ -27,12 +27,113 @@ final class Place {
         ("Kitchen", "台所"),
     ]
 
+    /// The seeded names in the user's language, in the same order as
+    /// `defaults` (which stays English: analytics and tests key off it).
+    /// New places are seeded with these, so a German Mac starts with
+    /// "Wohnzimmer", not "Living room".
+    static var localizedDefaultNames: [String] {
+        [
+            String(localized: "Living room", comment: "Default room name seeded on first launch; also the sample room in the widget gallery preview."),
+            String(localized: "Bedroom", comment: "Default room name seeded on first launch."),
+            String(localized: "Study", comment: "Default room name seeded on first launch: a room for working or reading (home office)."),
+            String(localized: "Kitchen", comment: "Default room name seeded on first launch."),
+        ]
+    }
+
+    /// Index into `defaults` of a seeded name, in English or in the current
+    /// language; nil for a name the user typed.
+    static func seededIndex(_ name: String) -> Int? {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        func same(_ a: String) -> Bool { a.compare(clean, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+        if let i = defaults.firstIndex(where: { same($0.0) }) { return i }
+        return localizedDefaultNames.firstIndex(where: same)
+    }
+
     /// Whether `name` is one of the seeded places. Those read as ordinary
     /// nouns and take "the" in a sentence ("the Bedroom"); a name the user
     /// typed ("Mum's room", "Office") is used bare.
-    static func isSeeded(_ name: String) -> Bool {
-        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return defaults.contains { $0.0.compare(clean, options: .caseInsensitive) == .orderedSame }
+    static func isSeeded(_ name: String) -> Bool { seededIndex(name) != nil }
+
+    /// The name to show. A seeded place that is still untouched (`SeedNames`)
+    /// reads in the user's language, whatever language it was made in: an
+    /// install from before localization keeps "Living room" in its store, and
+    /// a merge can leave a German "Wohnzimmer" on an English Mac. Display
+    /// only — the stored name is what syncs, so it never churns between
+    /// devices in different languages.
+    var displayName: String { SeedNames.bundled.displayName(name: name, kanji: kanji) }
+
+    /// Whether a typed or Apple Home room name is this place — by its stored
+    /// name or the name it is shown by.
+    func isNamed(_ other: String) -> Bool {
+        let other = other.trimmingCharacters(in: .whitespacesAndNewlines)
+        return [name, displayName].contains {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                .compare(other, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+        }
+    }
+}
+
+/// Which seeded place (index into `Place.defaults`) a place still is, in any
+/// language. Two devices in different languages seed "Living room" and
+/// "Wohnzimmer": different names, the same room. The kanji is the same
+/// everywhere and syncs with the place, so it is the identity; the name
+/// shows the user hasn't made the place their own.
+///
+/// **The rule:** a place is the seeded place *i* while its kanji is still
+/// `Place.defaults[i]`'s kanji **and** its name is still one of seed *i*'s
+/// names — English or any language the app ships. Renamed to anything else
+/// ("Büro", "Mum's room"), or its kanji changed or cleared, it is the user's
+/// own place: it merges by its exact name only, like any other. A kanji on
+/// its own never makes two places one — a custom "Lounge" 居間 stays apart
+/// from a seeded "Living room" 居間.
+struct SeedNames: Sendable, Equatable {
+    /// Per seed index: every name it may carry, normalized
+    /// (`PlaceResolver.normalized`).
+    let names: [Set<String>]
+
+    /// `names[i]` are seed *i*'s names in any language; English is always
+    /// added, so a table missing a language still knows the English seed.
+    init(names: [[String]]) {
+        self.names = Place.defaults.indices.map { i in
+            Set(([Place.defaults[i].0] + (i < names.count ? names[i] : [])).map(PlaceResolver.normalized))
+        }
+    }
+
+    /// English, the current language, and every language in the app bundle.
+    /// Every device on the same build reads the same table, so the merge
+    /// stays symmetric.
+    static let bundled: SeedNames = {
+        let english = Place.defaults.map(\.0)
+        var table = Place.localizedDefaultNames.map { [$0] }
+        for language in Bundle.main.localizations {
+            guard let path = Bundle.main.path(forResource: language, ofType: "lproj"),
+                  let bundle = Bundle(path: path) else { continue }
+            for (i, key) in english.enumerated() {
+                table[i].append(bundle.localizedString(forKey: key, value: key, table: nil))
+            }
+        }
+        return SeedNames(names: table)
+    }()
+
+    /// The seed index a place still is, or nil for the user's own place.
+    func identity(name: String, kanji: String) -> Int? {
+        let kanji = kanji.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !kanji.isEmpty, let i = Place.defaults.firstIndex(where: { $0.1 == kanji }) else { return nil }
+        return names[i].contains(PlaceResolver.normalized(name)) ? i : nil
+    }
+
+    /// The seed index a name alone points to, when exactly one seed has it —
+    /// for a reading, which carries its place's name but not its kanji.
+    func index(ofName name: String) -> Int? {
+        let key = PlaceResolver.normalized(name)
+        let hits = names.indices.filter { names[$0].contains(key) }
+        return hits.count == 1 ? hits[0] : nil
+    }
+
+    /// The seeded place in the user's language, or `name` as it is.
+    func displayName(name: String, kanji: String) -> String {
+        guard let i = identity(name: name, kanji: kanji) else { return name }
+        return Place.localizedDefaultNames[i]
     }
 }
 
@@ -244,8 +345,8 @@ enum Metric: String, CaseIterable, Identifiable, Sendable {
     var title: String {
         switch self {
         case .co2: "CO₂"
-        case .temperature: "Temp"
-        case .humidity: "Humidity"
+        case .temperature: String(localized: "Temp", comment: "Short metric label for temperature (deliberately abbreviated): chart picker, stat chips, menu bar. Keep as short as possible.")
+        case .humidity: String(localized: "Humidity", comment: "Short metric label: chart picker, stat chips, menu bar. Keep short.")
         case .pm25: "PM2.5"
         }
     }
@@ -280,21 +381,22 @@ enum Metric: String, CaseIterable, Identifiable, Sendable {
 
     /// Short form for the menu bar: "812", "21.4°", "48%", "6".
     func compact(_ v: Double?) -> String {
-        guard v != nil else { return "—" }
+        guard let v else { return "—" }
         switch self {
         case .co2: return format(v)
         case .temperature: return format(v) + "°"
-        case .humidity: return format(v) + "%"
+        // Locale-aware percent: "48%", "48 %" (fr), "%48" (tr).
+        case .humidity: return (v.rounded() / 100).formatted(.percent.precision(.fractionLength(0)).grouping(.never))
         case .pm25: return format(v)
         }
     }
 
     var longTitle: String {
         switch self {
-        case .co2: "Carbon dioxide (CO₂)"
-        case .temperature: "Temperature"
-        case .humidity: "Humidity"
-        case .pm25: "Fine particles (PM2.5)"
+        case .co2: String(localized: "Carbon dioxide (CO₂)", comment: "Full metric name, e.g. in History and exports. Keep the formula CO₂.")
+        case .temperature: String(localized: "Temperature", comment: "Full metric name, e.g. in History and exports.")
+        case .humidity: String(localized: "Humidity", comment: "Short metric label: chart picker, stat chips, menu bar. Keep short.")
+        case .pm25: String(localized: "Fine particles (PM2.5)", comment: "Full metric name for PM2.5 particulate matter, e.g. in History and exports. Keep PM2.5.")
         }
     }
 
@@ -312,27 +414,39 @@ enum Metric: String, CaseIterable, Identifiable, Sendable {
     /// How VoiceOver should say the unit.
     var spokenUnit: String {
         switch self {
-        case .co2: "parts per million"
-        case .temperature: "degrees Celsius"
-        case .humidity: "percent"
-        case .pm25: "micrograms per cubic metre"
+        case .co2: String(localized: "parts per million", comment: "VoiceOver: the unit ppm spoken in full.")
+        case .temperature: String(localized: "degrees Celsius", comment: "VoiceOver: the unit °C spoken in full.")
+        case .humidity: String(localized: "percent", comment: "VoiceOver: the unit % spoken in full.")
+        case .pm25: String(localized: "micrograms per cubic metre", comment: "VoiceOver: the unit µg/m³ spoken in full.")
+        }
+    }
+
+    /// The metric's name as VoiceOver says it.
+    private var spokenName: String {
+        switch self {
+        case .co2: String(localized: "CO₂", comment: "VoiceOver: the metric name carbon dioxide before a value. Keep CO₂ unless your language reads it differently.")
+        case .temperature: String(localized: "Temperature", comment: "Full metric name, e.g. in History and exports.")
+        case .humidity: String(localized: "Humidity", comment: "Short metric label: chart picker, stat chips, menu bar. Keep short.")
+        case .pm25: "PM2.5"
         }
     }
 
     /// "CO₂ 812 parts per million".
     func spoken(_ v: Double?) -> String {
-        let name = self == .temperature ? "Temperature" : title
-        guard v != nil else { return "\(name), no reading" }
-        return "\(name) \(format(v)) \(spokenUnit)"
+        let name = spokenName
+        guard v != nil else {
+            return String(localized: "\(name), no reading", comment: "VoiceOver: a metric with no value yet. %@ = metric name, e.g. CO₂ or Temperature.")
+        }
+        return String(localized: "spoken.metricReading", defaultValue: "\(name) \(format(v)) \(spokenUnit)", comment: "VoiceOver: a metric reading, e.g. 'CO₂ 812 parts per million'. %1$@ = metric name, %2$@ = number, %3$@ = unit spoken in full.")
     }
 
     func format(_ v: Double?) -> String {
         guard let v else { return "—" }
+        // Localized digits, never grouped ("1234", not "1,234"): a reading,
+        // not an amount. Machine-readable exports use their own formatting.
         switch self {
-        case .co2: return String(Int(v.rounded()))
-        case .temperature: return v.formatted(.number.precision(.fractionLength(1)))
-        case .humidity: return String(Int(v.rounded()))
-        case .pm25: return String(Int(v.rounded()))
+        case .co2, .humidity, .pm25: return Int(v.rounded()).formatted(.number.grouping(.never))
+        case .temperature: return v.formatted(.number.precision(.fractionLength(1)).grouping(.never))
         }
     }
 }

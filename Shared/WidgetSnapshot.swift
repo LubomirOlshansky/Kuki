@@ -63,9 +63,10 @@ struct WidgetSnapshot: Codable, Equatable, Sendable {
     }
 
     /// What the gallery and previews show before any real reading exists.
-    static let placeholder = WidgetSnapshot(
+    static var placeholder: WidgetSnapshot { WidgetSnapshot(
         co2: 742, temperature: 21.4, humidity: 47, pm25: 6,
-        placeName: "Living room", placeKanji: "居間", measuredAt: .now,
+        placeName: String(localized: "Living room", comment: "Default room name seeded on first launch; also the sample room in the widget gallery preview."),
+        placeKanji: "居間", measuredAt: .now,
         recentCO2: [610, 630, 655, 690, 720, 760, 790, 810, 800, 770, 750, 742],
-        limit: 1000, isDemo: false)
+        limit: 1000, isDemo: false) }
 }

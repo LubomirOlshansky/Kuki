@@ -110,28 +110,36 @@ final class MenuBarBridge {
         var details: [String] = []
         if paused {
             let time = snapshot?.lastHeard?.formatted(date: .omitted, time: .shortened) ?? "—"
-            details.append("Paused · last reading \(time)")
-            details.append("Apple Home only updates Kūki while it's the front app.")
-            details.append("Open Kūki, or use Station Mode to keep recording.")
+            details.append(String(localized: "Paused · last reading \(time)", comment: "Mac menu bar menu, detail line: recording paused while Kūki is in the background. %@ = time of the last reading, e.g. 14:05."))
+            details.append(String(localized: "Apple Home only updates Kūki while it's the front app.", comment: "Mac menu bar menu, detail line explaining why recording is paused."))
+            details.append(String(localized: "Open Kūki, or use Station Mode to keep recording.", comment: "Mac menu bar menu, detail line. Station Mode = Kūki's always-on display mode (use the same name as the Station Mode setting)."))
         } else if stale {
             if let heard = snapshot?.lastHeard {
-                details.append("Sensor out of reach · last \(heard.formatted(date: .omitted, time: .shortened))")
+                details.append(String(localized: "Sensor out of reach · last \(heard.formatted(date: .omitted, time: .shortened))", comment: "Mac menu bar menu, detail line: Apple Home can't reach the sensor. %@ = time of the last reading, e.g. 14:05."))
             } else {
-                details.append("Sensor out of reach")
+                details.append(String(localized: "Sensor out of reach", comment: "Mac menu bar menu, detail line: Apple Home can't reach the sensor."))
             }
-            details.append("Recording is paused until it's back.")
+            details.append(String(localized: "Recording is paused until it's back.", comment: "Mac menu bar menu, detail line: recording resumes when the sensor is reachable again. 'it' = the sensor."))
         } else if let co2 {
             let l = CO2Level(ppm: co2)
-            details.append("\(Metric.co2.format(co2)) ppm CO₂ — \(l.title.lowercased())")
+            let ppm = Metric.co2.format(co2)
+            // One sentence per level: lowercasing a translated title isn't safe.
+            let levelLine: String = switch l {
+            case .clear: String(localized: "\(ppm) ppm CO₂ — clear air", comment: "Mac menu bar menu, detail line: CO₂ value and air level (lowercase continuation of 'Clear air'). %@ = CO₂ value.")
+            case .fine: String(localized: "\(ppm) ppm CO₂ — fine", comment: "Mac menu bar menu, detail line: CO₂ value and air level (lowercase continuation of 'Fine'). %@ = CO₂ value.")
+            case .stale: String(localized: "\(ppm) ppm CO₂ — getting stale", comment: "Mac menu bar menu, detail line: CO₂ value and air level (lowercase continuation of 'Getting stale' — indoor air, not food). %@ = CO₂ value.")
+            case .poor: String(localized: "\(ppm) ppm CO₂ — stuffy", comment: "Mac menu bar menu, detail line: CO₂ value and air level (lowercase continuation of 'Stuffy'). %@ = CO₂ value.")
+            }
+            details.append(levelLine)
             details.append(l.advice)
         } else {
-            details.append("Waiting for the sensor…")
+            details.append(String(localized: "Waiting for the sensor…", comment: "Mac menu bar menu, detail line before the first reading arrives."))
         }
         if let s = live {
             var parts: [String] = []
-            if let t = s.temperature { parts.append("\(Metric.temperature.format(t)) °C") }
-            if let h = s.humidity { parts.append("\(Metric.humidity.format(h)) % humidity") }
-            if let p = s.pm25 { parts.append("PM2.5 \(Metric.pm25.format(p))") }
+            if let t = s.temperature { parts.append(String(localized: "\(Metric.temperature.format(t)) °C", comment: "Mac menu bar menu, value chip: temperature. %@ = number.")) }
+            if let h = s.humidity { parts.append(String(localized: "\(Metric.humidity.compact(h)) humidity", comment: "Mac menu bar menu, value chip: relative humidity. %@ = a percentage, already formatted (e.g. 48%).")) }
+            if let p = s.pm25 { parts.append(String(localized: "PM2.5 \(Metric.pm25.format(p))", comment: "Mac menu bar menu, value chip: fine particles. %@ = number (µg/m³). Keep PM2.5.")) }
             if !parts.isEmpty { details.append(parts.joined(separator: " · ")) }
         }
 
@@ -145,12 +153,12 @@ final class MenuBarBridge {
             labels: shown.map { m in
                 // Paused: the controller says "Paused" once, for the whole item.
                 paused ? m.spoken(snapshot.flatMap { m.value(of: $0) })
-                    : stale ? "\(m.title) unavailable, sensor out of reach" : m.spoken(live.flatMap { m.value(of: $0) })
+                    : stale ? String(localized: "\(m.title) unavailable, sensor out of reach", comment: "VoiceOver label of the Mac menu bar item when the sensor is unreachable. %@ = metric name (CO₂, Temp, Humidity, PM2.5).") : m.spoken(live.flatMap { m.value(of: $0) })
             },
             alert: paused ? -1 : alert,
-            header: current.map { "Sensor in \($0.name)" } ?? "Kūki",
+            header: current.map { String(localized: "Sensor in \($0.displayName)", comment: "Mac menu bar menu header: which room the sensor is in. %@ = room name.") } ?? "Kūki",
             details: details,
-            placeNames: places.map(\.name),
+            placeNames: places.map(\.displayName),
             placeIDs: places.map(\.id.uuidString),
             currentPlaceID: recorder.currentPlaceID?.uuidString ?? ""
         )

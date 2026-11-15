@@ -6,7 +6,9 @@ import UIKit
 enum WindowID {
     static let main = "main"
     static let settings = "settings"
-    static let settingsTitle = "Kūki Settings"
+    /// Localized; also how window visibility tells this window apart, so
+    /// the SwiftUI window and the scene title must both use this value.
+    static var settingsTitle: String { String(localized: "Kūki Settings", comment: "Mac: title of the Settings window.") }
     /// Mac: an invisible window that keeps a menu-bar-only Kūki "active" for
     /// Apple Home after the main window is closed.
     static let recorder = "recorder"

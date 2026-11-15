@@ -10,7 +10,7 @@ struct AirHero: View {
     var wind: Double = 0
     /// Per-frame updates (a sweep) skip the numeric-text roll.
     var rolling = true
-    var accessibilityLabel = "Estimated CO₂"
+    var accessibilityLabel = String(localized: "Estimated CO₂", comment: "Onboarding: VoiceOver label of the illustrative CO₂ dial")
 
     @ScaledMetric(relativeTo: .largeTitle) private var numeralScaled: CGFloat = 64
     @Environment(\.legibilityWeight) private var legibilityWeight
@@ -34,14 +34,14 @@ struct AirHero: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
                     .contentTransition(rolling ? .numericText(value: ppm) : .identity)
-                Text("ppm CO₂").kukiLabel()
+                Text(verbatim: "ppm CO₂").kukiLabel()
             }
             .frame(maxWidth: size * 0.72)
         }
         .frame(width: size, height: size)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
-        .accessibilityValue("\(Metric.co2.spoken(ppm)), \(level.title)")
+        .accessibilityValue(String(localized: "\(Metric.co2.spoken(ppm)), \(level.title)", comment: "VoiceOver value of a CO₂ reading in the onboarding: the spoken reading, then the air level name (e.g. Getting stale)"))
     }
 }
 

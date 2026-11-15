@@ -25,7 +25,7 @@ final class WidgetFeed {
         }
         let snapshot = WidgetSnapshot(
             co2: co2, temperature: temperature, humidity: humidity, pm25: pm25,
-            placeName: place?.name ?? "", placeKanji: place?.kanji ?? "",
+            placeName: place?.displayName ?? "", placeKanji: place?.kanji ?? "",
             measuredAt: measuredAt, recentCO2: recent, limit: limit, isDemo: isDemo)
         try? snapshot.save()
         #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
@@ -33,7 +33,7 @@ final class WidgetFeed {
         #endif
 
         let level = co2.map(CO2Level.init(ppm:))
-        let placeName = place?.name
+        let placeName = place?.displayName
         let due = now.timeIntervalSince(lastPushAt) >= 5 * 60 || level != lastLevel || placeName != lastPlace
         guard due else { return }
         lastPushAt = now

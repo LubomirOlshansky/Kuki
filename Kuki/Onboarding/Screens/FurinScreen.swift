@@ -10,20 +10,26 @@ struct FurinScreen: View {
 
     private static var notificationSettingsPath: String {
         #if targetEnvironment(macCatalyst)
-        "System Settings › Notifications"
+        String(localized: "System Settings › Notifications", comment: "Path to the macOS notification settings; use Apple's own names for System Settings and Notifications in your language")
         #else
-        "Settings › Notifications"
+        String(localized: "Settings › Notifications", comment: "Path to the iOS notification settings; use Apple's own names for Settings and Notifications in your language")
         #endif
     }
 
     private var rows: [(LimitChoice, String, String)] {
         var out: [(LimitChoice, String, String)] = [
-            (.sensitive, "800 ppm · Sensitive", "For bedrooms and sleep. Close to Europe's strictest bedroom level."),
-            (.standard, "1000 ppm · The usual line", "Where Germany's Umweltbundesamt stops calling air harmless."),
-            (.relaxed, "1200 ppm · Relaxed", "Fewer chimes in busy rooms."),
+            (.sensitive,
+             String(localized: "\(Metric.co2.format(800)) ppm · Sensitive", comment: "Onboarding, Fūrin screen: CO₂ limit choice; the placeholder is 800"),
+             String(localized: "For bedrooms and sleep. Close to Europe's strictest bedroom level.", comment: "Onboarding, Fūrin screen: subtitle of the 800 ppm limit")),
+            (.standard,
+             String(localized: "\(Metric.co2.format(1000)) ppm · The usual line", comment: "Onboarding, Fūrin screen: CO₂ limit choice; the placeholder is 1000; line = limit"),
+             String(localized: "Where Germany's Umweltbundesamt stops calling air harmless.", comment: "Onboarding, Fūrin screen: subtitle of the 1000 ppm limit. Umweltbundesamt = German Environment Agency, keep the name")),
+            (.relaxed,
+             String(localized: "\(Metric.co2.format(1200)) ppm · Relaxed", comment: "Onboarding, Fūrin screen: CO₂ limit choice; the placeholder is 1200"),
+             String(localized: "Fewer chimes in busy rooms.", comment: "Onboarding, Fūrin screen: subtitle of the 1200 ppm limit")),
         ]
         if model.mode == .replay, case .custom(let v) = LimitChoice(ppm: recorder.co2Limit) {
-            out.append((.custom(v), "\(Metric.co2.format(v)) ppm · Your current limit", ""))
+            out.append((.custom(v), String(localized: "\(Metric.co2.format(v)) ppm · Your current limit", comment: "Onboarding replay, Fūrin screen: the user's own CO₂ limit; the placeholder is a number"), ""))
         }
         return out
     }
@@ -34,8 +40,8 @@ struct FurinScreen: View {
         VStack(alignment: .leading, spacing: OnboardingMetrics.block) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: OnboardingMetrics.titleToBody) {
-                    Eyebrow(kanji: "鈴", word: "Fūrin")
-                    ScreenTitle(text: "When should Kūki ring?")
+                    Eyebrow(kanji: "鈴", word: String(localized: "Fūrin", comment: "Onboarding, Fūrin screen: eyebrow label above the title, small capitals. Fūrin = the Japanese wind chime the app plays as its alert, keep the word"))
+                    ScreenTitle(text: String(localized: "When should Kūki ring?", comment: "Onboarding, Fūrin screen: title; ring = play the chime alert"))
                 }
                 Spacer(minLength: 12)
                 FurinMark(sways: sways)
@@ -45,7 +51,7 @@ struct FurinScreen: View {
             VStack(spacing: 10) {
                 ForEach(rows, id: \.0) { choice, title, subtitle in
                     ChoiceRow(title: title, subtitle: subtitle,
-                              tag: choice == suggested ? "Suggested for sleep" : nil,
+                              tag: choice == suggested ? String(localized: "Suggested for sleep", comment: "Onboarding, Fūrin screen: small-capitals tag above a limit choice (short)") : nil,
                               selected: model.draft.staged.limit == choice) {
                         model.draft.staged.limit = choice
                     }
@@ -54,7 +60,7 @@ struct FurinScreen: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 12) {
-                    Toggle("Wind-chime sound", isOn: Binding(get: { model.draft.staged.soundOn ?? recorder.soundOn },
+                    Toggle(String(localized: "Wind-chime sound", comment: "Onboarding, Fūrin screen: switch for the alert sound"), isOn: Binding(get: { model.draft.staged.soundOn ?? recorder.soundOn },
                                                              set: { model.draft.staged.soundOn = $0 }))
                         .font(Typeface.body)
                         .foregroundStyle(Ink.ink)
@@ -71,19 +77,19 @@ struct FurinScreen: View {
                             .quietHover(Circle())
                     }
                     .buttonStyle(QuietButtonStyle())
-                    .accessibilityLabel("Play the chime")
+                    .accessibilityLabel(Text("Play the chime", comment: "Onboarding, Fūrin screen: VoiceOver label of the speaker button"))
                 }
                 Hairline()
                 VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Also send a notification", isOn: $recorder.notifyOn)
+                    Toggle(String(localized: "Also send a notification", comment: "Onboarding, Fūrin screen: switch; must match the quoted name in the notifications-off message"), isOn: $recorder.notifyOn)
                         .font(Typeface.body)
                         .foregroundStyle(Ink.ink)
                         .tint(Ink.switchOn)
-                    Text("Your \(OnboardingCopy.device(platform)) will ask first.")
+                    Text("Your \(OnboardingCopy.device(platform)) will ask first.", comment: "Onboarding, Fūrin screen: footnote under the notification switch; the placeholder is iPhone, iPad or Mac")
                         .font(.footnote)
                         .foregroundStyle(Ink.inkSoft)
                     if recorder.notificationsDenied {
-                        Text("Notifications are turned off for Kūki. To get them, allow Kūki in \(Self.notificationSettingsPath), then turn \u{201C}Also send a notification\u{201D} on again.")
+                        Text("Notifications are turned off for Kūki. To get them, allow Kūki in \(Self.notificationSettingsPath), then turn \u{201C}Also send a notification\u{201D} on again.", comment: "Onboarding, Fūrin screen: the placeholder is a settings path such as Settings › Notifications; the quoted name must match the switch label Also send a notification")
                             .font(.footnote)
                             .foregroundStyle(Ink.ink)
                             .fixedSize(horizontal: false, vertical: true)
@@ -92,7 +98,7 @@ struct FurinScreen: View {
             }
             .padding(.top, 4)
 
-            Text("It rings once per stuffy spell, then waits until the air has clearly recovered. Change any of this in Settings.")
+            Text("It rings once per stuffy spell, then waits until the air has clearly recovered. Change any of this in Settings.", comment: "Onboarding, Fūrin screen: footnote; it = the chime; stuffy spell = a period of stale indoor air")
                 .font(.footnote)
                 .foregroundStyle(Ink.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
@@ -117,7 +123,7 @@ private struct FurinMark: View {
 
     var body: some View {
         VStack(spacing: 2) {
-            Text("鈴").font(Typeface.mincho(34)).foregroundStyle(Ink.inkSoft)
+            Text(verbatim: "鈴").font(Typeface.mincho(34)).foregroundStyle(Ink.inkSoft)
                 .sway(sways, amplitude: 1, lag: 0, off: reduceMotion)
             Rectangle().fill(Ink.hairline).frame(width: 6, height: 22)
                 .overlay(Rectangle().stroke(Ink.inkFaint, lineWidth: 0.5))

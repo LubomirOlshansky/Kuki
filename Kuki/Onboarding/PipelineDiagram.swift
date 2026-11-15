@@ -10,7 +10,7 @@ struct PipelineDiagram: View {
     @State private var width: CGFloat = 0
     @State private var arrivals = 0
 
-    private let stops = ["ALPSTUGA", "Home hub", "Apple Home", "Kūki"]
+    private let stops = ["ALPSTUGA", String(localized: "Home hub", comment: "Onboarding, pipeline diagram: a stop in the chain sensor → home hub → Apple Home → Kūki, small capitals (short)"), "Apple Home", "Kūki"]
     /// Narrower than this, the four stops stack: on a phone-width column the
     /// row squeezes "HomePod or Apple TV" and the labels into two lines each.
     /// iPad and the Mac window (at least 560 pt) keep the row.
@@ -21,13 +21,16 @@ struct PipelineDiagram: View {
             if dynamicTypeSize.isAccessibilitySize || (width > 0 && width < Self.verticalBelow) {
                 vertical
             } else {
+                // A physical chain read in order, sensor first; its travelling
+                // dot is placed by x, so the row stays left to right in RTL.
                 horizontal
+                    .environment(\.layoutDirection, .leftToRight)
             }
         }
         .frame(maxWidth: .infinity)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Your ALPSTUGA talks to a home hub over Thread. Apple Home passes its readings to Kūki.")
+        .accessibilityLabel(Text("Your ALPSTUGA talks to a home hub over Thread. Apple Home passes its readings to Kūki.", comment: "Onboarding, pipeline diagram: VoiceOver description. Thread is the name of a wireless protocol, keep it."))
     }
 
     private var horizontal: some View {
@@ -47,7 +50,7 @@ struct PipelineDiagram: View {
             .frame(height: 8)
             .padding(.horizontal, 24)
             HStack(spacing: 0) {
-                Text("Thread").font(.caption2).foregroundStyle(Ink.inkSoft)
+                Text(verbatim: "Thread").font(.caption2).foregroundStyle(Ink.inkSoft)
                     .frame(maxWidth: .infinity)
                 Color.clear.frame(maxWidth: .infinity)
                 Color.clear.frame(maxWidth: .infinity)
@@ -63,7 +66,7 @@ struct PipelineDiagram: View {
                 if i < stops.count - 1 {
                     HStack(spacing: 6) {
                         Image(systemName: "chevron.down").font(.caption2).foregroundStyle(Ink.inkFaint)
-                        if i == 0 { Text("Thread").font(.caption2).foregroundStyle(Ink.inkSoft) }
+                        if i == 0 { Text(verbatim: "Thread").font(.caption2).foregroundStyle(Ink.inkSoft) }
                     }
                 }
             }
@@ -94,7 +97,7 @@ struct PipelineDiagram: View {
                 Text(text).kukiLabel().lineLimit(2).multilineTextAlignment(.center).minimumScaleFactor(0.8)
             }
             if index == 1 {
-                Text("HomePod or Apple TV").font(.caption2).foregroundStyle(Ink.inkSoft)
+                Text("HomePod or Apple TV", comment: "Onboarding, pipeline diagram: caption under Home hub; HomePod and Apple TV are product names").font(.caption2).foregroundStyle(Ink.inkSoft)
                     .multilineTextAlignment(.center)
             }
         }

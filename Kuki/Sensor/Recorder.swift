@@ -150,7 +150,7 @@ final class Recorder {
         homeKitRequested = d.bool(forKey: Keys.homeKitRequested)
         demo = DemoSensor(now: clock())
         homeKit.onChange = { [weak self] in self?.updateStaleness() }
-        reminders.placeName = { [weak self] in self?.currentPlace()?.name }
+        reminders.placeName = { [weak self] in self?.currentPlace()?.displayName }
     }
 
     /// "co2,temperature" → [.co2, .temperature], in canonical order, unknown names dropped.
@@ -193,8 +193,14 @@ final class Recorder {
     /// shows.
     var live: SensorSnapshot? { isSensorStale ? nil : current }
 
+    /// Stored with each reading (and matched by `SensorFilter`): not translated.
     var sensorName: String {
         useDemo ? DemoSensor.name : (activeSensor?.name ?? "Sensor")
+    }
+
+    /// The sensor's name for the screen: the demo sensor in the user's language.
+    var sensorDisplayName: String {
+        useDemo ? DemoSensor.displayName : (activeSensor?.name ?? String(localized: "Sensor", comment: "Fallback name for the air sensor when Apple Home gives none."))
     }
 
     /// Which readings history, stats and exports should show.
@@ -469,8 +475,10 @@ final class Recorder {
         // Seed whenever the store has no places at all — a fresh install, or
         // a new store location — not only on the very first launch.
         guard let context, ((try? context.fetchCount(FetchDescriptor<Place>())) ?? 0) == 0 else { return }
+        // Named in the user's language; `Place.defaults` stays the English key.
+        let names = Place.localizedDefaultNames
         for (i, item) in Place.defaults.enumerated() {
-            context.insert(Place(name: item.0, kanji: item.1, sortIndex: i))
+            context.insert(Place(name: names[i], kanji: item.1, sortIndex: i))
         }
         try? context.save()
         defaults.set(true, forKey: Keys.seeded)
@@ -560,9 +568,9 @@ final class Recorder {
 
     private func postNotification(co2: Double) {
         let content = UNMutableNotificationContent()
-        let place = currentPlace()?.name ?? "The room"
-        content.title = "\(place): \(Metric.co2.format(co2)) ppm CO₂"
-        content.body = "Time to open a window for a few minutes."
+        let place = currentPlace()?.displayName ?? String(localized: "The room", comment: "Stands in for the room name at the start of the CO₂ alert notification title when no room is known (\"The room: 1200 ppm CO₂\").")
+        content.title = String(localized: "\(place): \(Metric.co2.format(co2)) ppm CO₂", comment: "CO₂ alert notification title. %1$@ = room name (or 'The room'), %2$@ = CO₂ value. Keep ppm and CO₂.")
+        content.body = String(localized: "Time to open a window for a few minutes.", comment: "CO₂ alert notification body, sent when CO₂ crosses the user's limit.")
         // The app rings the fūrin itself when the sound is on; the banner
         // then stays silent so the bell never sounds twice.
         content.sound = Furin.notificationSound(appRings: soundOn)

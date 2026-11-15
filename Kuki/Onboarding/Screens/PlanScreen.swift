@@ -13,18 +13,20 @@ struct PlanScreen: View {
 
     private static var notificationSettingsPath: String {
         #if targetEnvironment(macCatalyst)
-        "System Settings › Notifications"
+        String(localized: "System Settings › Notifications", comment: "Path to the macOS notification settings; use Apple's own names for System Settings and Notifications in your language")
         #else
-        "Settings › Notifications"
+        String(localized: "Settings › Notifications", comment: "Path to the iOS notification settings; use Apple's own names for Settings and Notifications in your language")
         #endif
     }
 
     /// The usage-statistics disclosure, with the path to its switch.
     static var analyticsNote: String {
         #if targetEnvironment(macCatalyst)
-        "Kūki shares usage statistics to improve the app. You can turn this off in Kūki › Settings… › Privacy."
+        String(localized: "Kūki shares usage statistics to improve the app. You can turn this off in Kūki › Settings… › Privacy.",
+               comment: "Onboarding, Plan screen, Mac: analytics disclosure. Kūki › Settings… › Privacy is the path to the app's own setting; Settings… and Privacy must match the menu item and the Settings section names")
         #else
-        "Kūki shares usage statistics to improve the app. You can turn this off in Settings › Privacy."
+        String(localized: "Kūki shares usage statistics to improve the app. You can turn this off in Settings › Privacy.",
+               comment: "Onboarding, Plan screen: analytics disclosure. Settings › Privacy is the path to the app's own setting; Privacy must match the section name in the app's Settings")
         #endif
     }
 
@@ -41,8 +43,8 @@ struct PlanScreen: View {
             showInDock: recorder.showInDock)
         VStack(alignment: .leading, spacing: OnboardingMetrics.block) {
             VStack(alignment: .leading, spacing: OnboardingMetrics.titleToBody) {
-                Eyebrow(kanji: "始", word: "Begin")
-                ScreenTitle(text: "Your plan")
+                Eyebrow(kanji: "始", word: String(localized: "Begin", comment: "Onboarding, Plan screen: eyebrow label above the title, small capitals (one short word)"))
+                ScreenTitle(text: String(localized: "Your plan", comment: "Onboarding, Plan screen: title"))
             }
             VStack(alignment: .leading, spacing: 16) {
                 ForEach(Array(OnboardingPlan.lines(input).enumerated()), id: \.offset) { _, line in
@@ -64,14 +66,14 @@ struct PlanScreen: View {
 
             #if targetEnvironment(macCatalyst)
             VStack(alignment: .leading, spacing: 4) {
-                Toggle("Open at Login", isOn: Binding(get: { openAtLogin },
+                Toggle(String(localized: "Open at Login", comment: "Onboarding, Plan screen, Mac: switch; use the standard macOS wording for opening an app at login"), isOn: Binding(get: { openAtLogin },
                                                       set: { on in
                                                           openAtLogin = MenuBarBridge.shared.setOpenAtLogin(on)
                                                           Analytics.track("open_at_login_toggled", ["on": openAtLogin])
                                                       }))
                     .font(Typeface.body)
                     .tint(Ink.switchOn)
-                Text("So Kūki is back in the menu bar after a restart.")
+                Text("So Kūki is back in the menu bar after a restart.", comment: "Onboarding, Plan screen, Mac: footnote under Open at Login")
                     .font(.footnote)
                     .foregroundStyle(Ink.inkSoft)
             }
@@ -92,30 +94,50 @@ struct PlanScreen: View {
 
     private func reminder(times: [ReminderTime], placeName: String?, suggested: Bool) -> some View {
         let reminders = recorder.reminders
-        let room = AiringReminder.title(placeName: placeName)
-            .replacingOccurrences(of: "Time to air ", with: "")
         return NoteCard {
-            if suggested { Text("Suggested for you").kukiLabel().foregroundStyle(Ink.ink) }
+            if suggested {
+                Text("Suggested for you", comment: "Onboarding, Plan screen: small-capitals tag above the reminder switch (short)")
+                    .kukiLabel().foregroundStyle(Ink.ink)
+            }
             Toggle(isOn: Binding(get: { reminders.isOn },
                                  set: { on in
                                      if on { reminders.enable(times: times) } else { reminders.isOn = false }
                                      OnboardingAnalytics.answered("reminder", on)
                                  })) {
-                Text("Remind me to air \(room)")
+                Text(Self.remindTitle(placeName: placeName))
                     .font(Typeface.body)
                     .foregroundStyle(Ink.ink)
             }
             .tint(Ink.switchOn)
-            Text("Every day at \(AiringReminder.describe(reminders.isOn ? reminders.times : times)): \u{201C}open a window wide for 5 minutes.\u{201D} It's a reminder at set times, not a reading, so it may come when the air is already fresh. Change the times in Settings.")
+            Text("Every day at \(AiringReminder.describe(reminders.isOn ? reminders.times : times)): \u{201C}open a window wide for 5 minutes.\u{201D} It's a reminder at set times, not a reading, so it may come when the air is already fresh. Change the times in Settings.",
+                 comment: "Onboarding, Plan screen: under the reminder switch; the placeholder is a list of times, e.g. 9:00 and 20:00. The quoted words repeat the reminder notification's text.")
                 .font(.footnote)
                 .foregroundStyle(Ink.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
             if reminders.denied {
-                Text("Notifications are turned off for Kūki. To get reminders, allow Kūki in \(Self.notificationSettingsPath), then turn this on again.")
+                Text("Notifications are turned off for Kūki. To get reminders, allow Kūki in \(Self.notificationSettingsPath), then turn this on again.",
+                     comment: "Onboarding, Plan screen: the placeholder is a settings path such as Settings › Notifications")
                     .font(.footnote)
                     .foregroundStyle(Ink.ink)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+
+    /// "Remind me to air the bedroom": one sentence per seeded room (as the
+    /// reminder's own title), so each language can inflect it; a typed name
+    /// stays exactly as typed.
+    static func remindTitle(placeName: String?) -> String {
+        guard let name = placeName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
+            return String(localized: "Remind me to air the room", comment: "Onboarding, Plan screen: airing reminder switch when no room is known; to air = to ventilate")
+        }
+        switch Place.seededIndex(name) {
+        case 0: return String(localized: "Remind me to air the living room", comment: "Onboarding, Plan screen: airing reminder switch for the default Living room")
+        case 1: return String(localized: "Remind me to air the bedroom", comment: "Onboarding, Plan screen: airing reminder switch for the default Bedroom")
+        case 2: return String(localized: "Remind me to air the study", comment: "Onboarding, Plan screen: airing reminder switch for the default Study (home office)")
+        case 3: return String(localized: "Remind me to air the kitchen", comment: "Onboarding, Plan screen: airing reminder switch for the default Kitchen")
+        default:
+            return String(localized: "Remind me to air \(name)", comment: "Onboarding, Plan screen: airing reminder switch; the placeholder is a room name the user typed, exactly as typed")
         }
     }
 

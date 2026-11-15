@@ -20,15 +20,22 @@ struct StationView: View {
 
     private static var leaveHint: String {
         #if targetEnvironment(macCatalyst)
-        "Click or press Esc to leave"
+        String(localized: "Click or press Esc to leave",
+               comment: "Station Mode (dim always-on screen), Mac: brief hint on how to exit")
         #else
-        "Tap to leave"
+        String(localized: "Tap to leave",
+               comment: "Station Mode (dim always-on screen), iPhone/iPad: brief hint on how to exit")
         #endif
     }
 
     private var outOfReach: String {
-        guard let heard = recorder.current?.lastHeard else { return "Sensor out of reach" }
-        return "Out of reach · last \(heard.formatted(date: .omitted, time: .shortened))"
+        guard let heard = recorder.current?.lastHeard else {
+            return String(localized: "Sensor out of reach",
+                          comment: "Station Mode: the air sensor can't be heard right now")
+        }
+        let time = heard.formatted(date: .omitted, time: .shortened)
+        return String(localized: "Out of reach · last \(time)",
+                      comment: "Station Mode: sensor can't be heard; placeholder is the time of the last reading, e.g. 14:05")
     }
 
     var body: some View {
@@ -52,8 +59,9 @@ struct StationView: View {
                         }
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(Metric.co2.spoken(co2))
-                        Text(stale ? outOfReach : "\(level.kanji)  \(level.title)")
+                        Text(verbatim: stale ? outOfReach : "\(level.kanji)  \(level.title)")
                             .font(Typeface.mincho(17))
+                            .multilineTextAlignment(.center)
                             .foregroundStyle(.white.opacity(style.secondary))
                     } else {
                         Text("Waiting for the sensor…")
@@ -61,7 +69,7 @@ struct StationView: View {
                     }
                     Spacer()
                     VStack(spacing: 6) {
-                        Text(places.first { $0.id == recorder.currentPlaceID }?.name ?? "")
+                        Text(places.first { $0.id == recorder.currentPlaceID }?.displayName ?? "")
                         Text(context.date.formatted(date: .omitted, time: .shortened))
                     }
                     .font(.caption)

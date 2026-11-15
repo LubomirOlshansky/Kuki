@@ -406,7 +406,7 @@ final class HistorySync {
             }
         }
         core.didDelete(deleted)
-        sendProblem = storageFull ? "iCloud storage is full" : retries.problem
+        sendProblem = storageFull ? String(localized: "iCloud storage is full", comment: "Settings, iCloud Sync status line: the user's iCloud storage has no space left.") : retries.problem
         if zoneMissing {
             core.resetZone()
             syncEngine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: SyncSchema.zoneID))])

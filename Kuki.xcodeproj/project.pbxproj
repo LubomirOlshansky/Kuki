@@ -10,6 +10,7 @@
 		A2000000000000000000A101 /* KukiMenuBar.bundle in Embed PlugIns */ = {isa = PBXBuildFile; fileRef = A2000000000000000000A001 /* KukiMenuBar.bundle */; platformFilter = maccatalyst; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		A5000000000000000000A101 /* KukiWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A5000000000000000000A001 /* KukiWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A6000000000000000000A101 /* AmplitudeSwift in Frameworks */ = {isa = PBXBuildFile; productRef = A6000000000000000000A102 /* AmplitudeSwift */; };
+		A7000000000000000000A101 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A7000000000000000000A001 /* InfoPlist.xcstrings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -66,6 +67,7 @@
 		A2000000000000000000A001 /* KukiMenuBar.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KukiMenuBar.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		A3000000000000000000A001 /* KukiTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KukiTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A5000000000000000000A001 /* KukiWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = KukiWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A7000000000000000000A001 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -137,8 +139,17 @@
 				A5000000000000000000B001 /* KukiWidget */,
 				A2000000000000000000B001 /* KukiMenuBar */,
 				A3000000000000000000B001 /* KukiTests */,
+				A7000000000000000000D001 /* Config */,
 				A1000000000000000000D002 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		A7000000000000000000D001 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				A7000000000000000000A001 /* InfoPlist.xcstrings */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 		A1000000000000000000D002 /* Products */ = {
@@ -276,6 +287,26 @@
 			knownRegions = (
 				en,
 				Base,
+				es,
+				fr,
+				de,
+				it,
+				"pt-BR",
+				ja,
+				ko,
+				"zh-Hans",
+				"zh-Hant",
+				ru,
+				uk,
+				pl,
+				nl,
+				tr,
+				sv,
+				ar,
+				hi,
+				id,
+				vi,
+				th,
 			);
 			mainGroup = A1000000000000000000D001;
 			minimizedProjectReferenceProxies = 1;
@@ -300,6 +331,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A7000000000000000000A101 /* InfoPlist.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -388,6 +420,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -399,6 +432,7 @@
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = Debug;
@@ -413,12 +447,14 @@
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
@@ -516,6 +552,7 @@
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -538,6 +575,7 @@
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				WRAPPER_EXTENSION = bundle;
 			};

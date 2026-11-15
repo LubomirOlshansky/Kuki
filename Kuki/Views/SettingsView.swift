@@ -14,9 +14,11 @@ struct SettingsView: View {
 
     private static var notificationSettingsPath: String {
         #if targetEnvironment(macCatalyst)
-        "System Settings › Notifications"
+        String(localized: "System Settings › Notifications",
+               comment: "Path to the Mac's notification settings, used inside a sentence. Use the names macOS shows in your language.")
         #else
-        "Settings › Notifications"
+        String(localized: "Settings › Notifications",
+               comment: "Path to the iPhone/iPad notification settings, used inside a sentence. Use the names iOS shows in your language.")
         #endif
     }
 
@@ -37,15 +39,21 @@ struct SettingsView: View {
 
                 Section {
                     if recorder.homeKit.sensors.isEmpty {
-                        Text(recorder.useDemo ? "Using the demo sensor" : "No air sensor found in Apple Home")
-                            .foregroundStyle(Ink.inkSoft)
+                        Group {
+                            if recorder.useDemo {
+                                Text("Using the demo sensor", comment: "Settings › Sensor: shown instead of a sensor picker while the built-in demo sensor is on")
+                            } else {
+                                Text("No air sensor found in Apple Home", comment: "Settings › Sensor: no sensor available")
+                            }
+                        }
+                        .foregroundStyle(Ink.inkSoft)
                     } else {
                         Picker("Sensor", selection: Binding(
                             get: { recorder.activeSensor?.id },
                             set: { r.selectedSensorID = $0 }
                         )) {
                             ForEach(recorder.homeKit.sensors) { s in
-                                Text(s.room.isEmpty ? s.name : "\(s.name) · \(s.room)").tag(Optional(s.id))
+                                Text(verbatim: s.room.isEmpty ? s.name : "\(s.name) · \(s.room)").tag(Optional(s.id))
                             }
                         }
                     }
@@ -60,8 +68,13 @@ struct SettingsView: View {
                 } header: {
                     Text("Sensor")
                 } footer: {
-                    Text("Kūki reads the sensor through Apple Home. Apple only gives apps the current value, so the history is what Kūki records while it's running."
-                         + (recorder.homeKitRequested ? "" : " Turning the demo off connects Kūki to Apple Home."))
+                    if recorder.homeKitRequested {
+                        Text("Kūki reads the sensor through Apple Home. Apple only gives apps the current value, so the history is what Kūki records while it's running.",
+                             comment: "Settings › Sensor footer")
+                    } else {
+                        Text("Kūki reads the sensor through Apple Home. Apple only gives apps the current value, so the history is what Kūki records while it's running. Turning the demo off connects Kūki to Apple Home.",
+                             comment: "Settings › Sensor footer, before Kūki has asked for Apple Home access (the demo sensor is on)")
+                    }
                 }
 
                 #if targetEnvironment(macCatalyst)
@@ -104,9 +117,13 @@ struct SettingsView: View {
                 } header: {
                     Text("Menu Bar")
                 } footer: {
-                    Text(recorder.showInDock
-                         ? "With a Dock icon, Kūki is a normal app — and Apple Home only updates it while it's in front, so recording pauses in the background."
-                         : "Kūki runs from the menu bar, so it keeps recording around the clock — even with its window closed. A small mark appears only when the air needs opening up: ◐ getting stale, ● stuffy.")
+                    if recorder.showInDock {
+                        Text("With a Dock icon, Kūki is a normal app — and Apple Home only updates it while it's in front, so recording pauses in the background.",
+                             comment: "Settings › Menu Bar footer (Mac) when Show in Dock is on")
+                    } else {
+                        Text("Kūki runs from the menu bar, so it keeps recording around the clock — even with its window closed. A small mark appears only when the air needs opening up: ◐ getting stale, ● stuffy.",
+                             comment: "Settings › Menu Bar footer (Mac). Keep the ◐ and ● symbols. 'Getting stale' and 'stuffy' describe indoor air quality, as in the CO₂ level names.")
+                    }
                 }
                 #endif
 
@@ -120,8 +137,10 @@ struct SettingsView: View {
                         }
                     ), in: 600...2000, step: 50) {
                         LabeledContent("CO₂ limit", value: "\(Metric.co2.format(recorder.co2Limit)) ppm")
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                     }
-                    Toggle("Wind-chime sound", isOn: Binding(
+                    Toggle(String(localized: "Wind-chime sound", comment: "Settings › Alert: toggle for the soft wind-bell (fūrin) sound when CO₂ reaches the limit"), isOn: Binding(
                         get: { recorder.soundOn },
                         set: { on in
                             r.soundOn = on
@@ -129,7 +148,7 @@ struct SettingsView: View {
                         }
                     ))
                     .tint(Ink.switchOn)
-                    Toggle("Notification", isOn: Binding(
+                    Toggle(String(localized: "Notification", comment: "Settings › Alert: toggle for a notification when CO₂ reaches the limit"), isOn: Binding(
                         get: { recorder.notifyOn },
                         set: { on in
                             r.notifyOn = on
@@ -137,19 +156,21 @@ struct SettingsView: View {
                         }
                     ))
                     .tint(Ink.switchOn)
-                    Button("Play Chime") {
+                    Button(String(localized: "Play Chime", comment: "Settings › Alert: button that plays the wind-chime (fūrin) sound once, as a preview")) {
                         recorder.previewAlert()
                         Analytics.track("chime_played_manually")
                     }
                 } header: {
-                    Text("Alert")
+                    Text("Alert", comment: "Settings: section header for the CO₂ limit alert (noun)")
                 } footer: {
                     VStack(alignment: .leading, spacing: 8) {
                         if recorder.notificationsDenied {
-                            Text("Notifications are turned off for Kūki. To get them, allow Kūki in \(Self.notificationSettingsPath), then turn Notification on again.")
+                            Text("Notifications are turned off for Kūki. To get them, allow Kūki in \(Self.notificationSettingsPath), then turn Notification on again.",
+                                 comment: "Settings › Alert footer. Placeholder is the settings path, e.g. 'Settings › Notifications'. 'Notification' is the toggle's name above.")
                                 .foregroundStyle(Ink.ink)
                         }
-                        Text("A soft fūrin rings once when CO₂ reaches the limit, then stays quiet until the air has clearly recovered. 1000 ppm is the usual \"open a window\" line.")
+                        Text("A soft fūrin rings once when CO₂ reaches the limit, then stays quiet until the air has clearly recovered. 1000 ppm is the usual \"open a window\" line.",
+                             comment: "Settings › Alert footer. 'fūrin' = a Japanese wind chime; keep the word fūrin.")
                     }
                 }
 
@@ -163,10 +184,21 @@ struct SettingsView: View {
                             Analytics.track("record_interval_changed", ["minutes": minutes])
                         }
                     )) {
-                        ForEach([1, 2, 5, 10], id: \.self) { Text("\($0) min").tag($0) }
+                        ForEach([1, 2, 5, 10], id: \.self) { minutes in
+                            Text("\(minutes) min", comment: "Settings › Recording: an interval option in minutes (abbreviated)").tag(minutes)
+                        }
                     }
-                    Picker("Settling after a move", selection: $r.settleMinutes) {
-                        ForEach([0, 5, 10, 15, 20], id: \.self) { Text($0 == 0 ? "Off" : "\($0) min").tag($0) }
+                    Picker(String(localized: "Settling after a move", comment: "Settings › Recording: how many minutes after moving the sensor to a new room are left out of comparisons, while its CO₂ cell adapts"), selection: $r.settleMinutes) {
+                        ForEach([0, 5, 10, 15, 20], id: \.self) { minutes in
+                            Group {
+                                if minutes == 0 {
+                                    Text("Off", comment: "Settings › Recording › Settling after a move: no settling period")
+                                } else {
+                                    Text("\(minutes) min", comment: "Settings › Recording: an interval option in minutes (abbreviated)")
+                                }
+                            }
+                            .tag(minutes)
+                        }
                     }
                 } header: {
                     Text("Recording")
@@ -174,7 +206,7 @@ struct SettingsView: View {
 
                 if CloudSync.isAvailable {
                     Section {
-                        Toggle("iCloud Sync", isOn: Binding(
+                        Toggle(String(localized: "iCloud Sync", comment: "Settings › iCloud: toggle. 'iCloud' is a proper name."), isOn: Binding(
                             get: { cloudSyncOn },
                             set: { on in
                                 cloudSyncOn = on
@@ -271,11 +303,15 @@ struct SettingsView: View {
 
     /// What "Delete all" really reaches, with sync on or off.
     private var deleteMessage: String {
-        let last = "Places are kept. This can't be undone — export first if you want a copy."
-        guard CloudSync.isAvailable else { return last }
+        guard CloudSync.isAvailable else {
+            return String(localized: "Places are kept. This can't be undone — export first if you want a copy.",
+                          comment: "Settings: message of the 'Delete every recording?' confirmation (no iCloud)")
+        }
         return HistorySync.shared.isRunning
-            ? "What this device recorded is also deleted from iCloud and your other devices. Readings from your other devices are removed here only. \(last)"
-            : "iCloud Sync is off: copies already in iCloud and on your other devices stay. \(last)"
+            ? String(localized: "What this device recorded is also deleted from iCloud and your other devices. Readings from your other devices are removed here only. Places are kept. This can't be undone — export first if you want a copy.",
+                     comment: "Settings: message of the 'Delete every recording?' confirmation, iCloud Sync on")
+            : String(localized: "iCloud Sync is off: copies already in iCloud and on your other devices stay. Places are kept. This can't be undone — export first if you want a copy.",
+                     comment: "Settings: message of the 'Delete every recording?' confirmation, iCloud Sync off")
     }
 }
 
@@ -293,13 +329,14 @@ private struct SyncStatusLine: View {
 
     private func text(now: Date) -> String {
         switch status {
-        case .off: "Off"
-        case .waiting: "Waiting for iCloud"
+        case .off: String(localized: "Off", comment: "Settings › iCloud footer: sync status when iCloud Sync is off")
+        case .waiting: String(localized: "Waiting for iCloud", comment: "Settings › iCloud footer: sync status")
         case let .problem(message): message
         case let .synced(date):
             now.timeIntervalSince(date) < 60
-                ? "Synced just now"
-                : "Synced \(date.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))"
+                ? String(localized: "Synced just now", comment: "Settings › iCloud footer: sync status")
+                : String(localized: "Synced \(date.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))",
+                         comment: "Settings › iCloud footer: sync status. Placeholder is a relative time, e.g. '2 min ago'.")
         }
     }
 }
@@ -311,7 +348,7 @@ private struct AiringReminderSection: View {
 
     var body: some View {
         Section {
-            Toggle("Airing reminder", isOn: $reminders.isOn)
+            Toggle(String(localized: "Airing reminder", comment: "Settings: toggle for a daily reminder to open a window and let fresh air in"), isOn: $reminders.isOn)
                 .tint(Ink.switchOn)
             if reminders.isOn {
                 ForEach(reminders.times, id: \.self) { time in
@@ -331,7 +368,8 @@ private struct AiringReminderSection: View {
                                     .contentShape(Rectangle())
                             }
                             .buttonStyle(.borderless)
-                            .accessibilityLabel("Remove \(time.date().formatted(date: .omitted, time: .shortened))")
+                            .accessibilityLabel(String(localized: "Remove \(time.date().formatted(date: .omitted, time: .shortened))",
+                                                       comment: "Settings › Airing reminder: VoiceOver label for the button removing one reminder time. Placeholder is a time, e.g. 09:00."))
                         }
                     }
                 }
@@ -344,7 +382,8 @@ private struct AiringReminderSection: View {
         } footer: {
             VStack(alignment: .leading, spacing: 8) {
                 if reminders.denied {
-                    Text("Notifications are turned off for Kūki. To get reminders, allow Kūki in \(notificationSettingsPath), then turn the reminder on again.")
+                    Text("Notifications are turned off for Kūki. To get reminders, allow Kūki in \(notificationSettingsPath), then turn the reminder on again.",
+                         comment: "Settings › Airing reminder footer. Placeholder is the settings path, e.g. 'Settings › Notifications'.")
                         .foregroundStyle(Ink.ink)
                 }
                 Text("A daily reminder to open a window wide for 5 minutes. It comes at the times you set: it can't read the air, so it may arrive when the room is already fresh.")

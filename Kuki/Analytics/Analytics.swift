@@ -128,11 +128,10 @@ enum OnboardingAnalytics {
     /// A seeded place's stable key ("bedroom", "living_room"), or "custom"
     /// for anything the user typed or Apple Home named. Never the name itself.
     static func placeKey(_ name: String?) -> String {
-        guard let name else { return "custom" }
-        guard let seeded = Place.defaults.first(where: {
-            $0.0.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
-        }) else { return "custom" }
-        return seeded.0.lowercased().replacingOccurrences(of: " ", with: "_")
+        // Matches the English name or the current language's seeded name, so
+        // the key stays English ("bedroom") on a German or Japanese device.
+        guard let name, let i = Place.seededIndex(name) else { return "custom" }
+        return Place.defaults[i].0.lowercased().replacingOccurrences(of: " ", with: "_")
     }
 
     static func goals(_ goals: Set<AirGoal>?) -> [String] {

@@ -52,8 +52,8 @@ struct NightScreen: View {
         let wide = WideReader.isWide(viewport, dynamicTypeSize)
         VStack(alignment: .leading, spacing: OnboardingMetrics.block) {
             VStack(alignment: .leading, spacing: OnboardingMetrics.titleToBody) {
-                Eyebrow(kanji: "寝", word: "Night")
-                ScreenTitle(text: "A closed bedroom fills up fast.")
+                Eyebrow(kanji: "寝", word: String(localized: "Night", comment: "Onboarding, Night screen: eyebrow label above the title, small capitals (one short word)"))
+                ScreenTitle(text: String(localized: "A closed bedroom fills up fast.", comment: "Onboarding, Night screen: title; fills up = with exhaled CO₂"))
             }
             .frame(maxWidth: wide ? OnboardingMetrics.maxWide : OnboardingMetrics.maxColumn, alignment: .leading)
             if model.nightRevealed {
@@ -83,7 +83,7 @@ struct NightScreen: View {
 
     private var guess: some View {
         VStack(alignment: .leading, spacing: OnboardingMetrics.bodyToControl) {
-            Text("Guess first: two people asleep, window shut, eight hours. Where does CO₂ end up?")
+            Text("Guess first: two people asleep, window shut, eight hours. Where does CO₂ end up?", comment: "Onboarding, Night screen: quiz question; the answers are CO₂ values in ppm")
                 .font(Typeface.title)
                 .foregroundStyle(Ink.ink)
                 .fixedSize(horizontal: false, vertical: true)
@@ -105,7 +105,7 @@ struct NightScreen: View {
 
     private func chips(_ guesses: [BedroomGuess]) -> some View {
         ForEach(guesses, id: \.self) { g in
-            Chip(title: Metric.co2.format(Double(g.rawValue)), accessibilityText: "\(g.rawValue) ppm",
+            Chip(title: Metric.co2.format(Double(g.rawValue)), accessibilityText: String(localized: "\(Metric.co2.format(Double(g.rawValue))) ppm", comment: "A CO₂ value with its unit, e.g. 812 ppm. Keep ppm."),
                  selected: model.draft.staged.guess == g) {
                 model.draft.staged.guess = g
                 model.noteInteraction("guess")
@@ -170,32 +170,34 @@ struct NightScreen: View {
     private var controls: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("People asleep").kukiLabel()
-                Picker("People asleep", selection: Binding(get: { sleepers }, set: { v in
+                Text("People asleep", comment: "Onboarding, Night screen: label above a 1/2/3 picker, small capitals").kukiLabel()
+                Picker(String(localized: "People asleep", comment: "Onboarding, Night screen: label above a 1/2/3 picker, small capitals"), selection: Binding(get: { sleepers }, set: { v in
                     lastChange = .people; sleepers = v
                     model.noteInteraction("people")
                 })) {
-                    ForEach(1...3, id: \.self) { Text("\($0)").tag($0) }
+                    ForEach(1...3, id: \.self) { Text($0.formatted()).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                .accessibilityValue(sleepers == 1 ? "1 person" : "\(sleepers) people")
+                .accessibilityValue(String(localized: "\(sleepers) people", comment: "Onboarding, Night screen: VoiceOver value of the people-asleep picker (plural)"))
             }
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text("Hours asleep").kukiLabel()
+                    Text("Hours asleep", comment: "Onboarding, Night screen: label above the hours slider, small capitals").kukiLabel()
                     Spacer()
                     Text(hoursText).font(.subheadline.monospacedDigit()).foregroundStyle(Ink.ink)
                 }
                 Slider(value: Binding(get: { hours }, set: { v in
                     lastChange = .hours; tween = nil; hours = (v * 2).rounded() / 2
                     model.noteInteraction("hours_slider")
-                }), in: 0...8) { Text("Hours asleep") }
+                }), in: 0...8) { Text("Hours asleep", comment: "Onboarding, Night screen: label above the hours slider, small capitals") }
                     .tint(CO2Level(ppm: targetPPM).color)
-                    .accessibilityValue("\(hoursSpoken), \(Metric.co2.spoken(targetPPM)), \(CO2Level(ppm: targetPPM).title)")
+                    .accessibilityValue(String(localized: "\(hoursSpoken), \(Metric.co2.spoken(targetPPM)), \(CO2Level(ppm: targetPPM).title)", comment: "Onboarding, Night screen: VoiceOver value of the hours slider: hours asleep, the spoken CO₂ reading, then the air level name"))
             }
             HStack {
                 Spacer()
-                OutlineButton(title: windowOpen ? "Close the window" : "Open the window · 5 min",
+                OutlineButton(title: windowOpen
+                                ? String(localized: "Close the window", comment: "Onboarding, Night screen: button in the bedroom simulator (keep short)")
+                                : String(localized: "Open the window · 5 min", comment: "Onboarding, Night screen: button in the bedroom simulator; airs the room for 5 minutes (keep short)"),
                               systemImage: windowOpen ? "window.horizontal.closed" : "wind") { toggleWindow() }
                 Spacer()
             }
@@ -207,26 +209,31 @@ struct NightScreen: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
                 .animation(.easeInOut(duration: 0.3), value: readout)
-            Text("Estimate for a 30 m³ bedroom with the window shut.")
+            Text("Estimate for a 30 m³ bedroom with the window shut.", comment: "Onboarding, Night screen: footnote under the simulator")
                 .font(.footnote)
                 .foregroundStyle(Ink.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
+    private var hoursNumber: String { hours.formatted(.number.precision(.fractionLength(0...1))) }
+
     private var hoursText: String {
-        hours == hours.rounded() ? "\(Int(hours)) h" : String(format: "%.1f h", hours)
+        String(localized: "\(hoursNumber) h", comment: "Onboarding, Night screen: hours asleep, abbreviated, e.g. 8 h or 1.5 h (very short)")
     }
 
     private var hoursSpoken: String {
-        hours == 1 ? "1 hour" : (hours == hours.rounded() ? "\(Int(hours)) hours" : String(format: "%.1f hours", hours))
+        if hours == hours.rounded() {
+            return String(localized: "\(Int(hours)) hours", comment: "Onboarding, Night screen: hours asleep, spoken by VoiceOver (plural)")
+        }
+        return String(localized: "\(hoursNumber) hours", comment: "Onboarding, Night screen: a fractional number of hours asleep such as 1.5, spoken by VoiceOver")
     }
 
     private var readout: String {
         if windowOpen && airingDone {
             let before = Metric.co2.format((closedPPM / 10).rounded() * 10)
             let after = Metric.co2.format((targetPPM / 10).rounded() * 10)
-            return "Window wide for 5 minutes: \(before) → \(after) ppm."
+            return String(localized: "Window wide for 5 minutes: \(before) → \(after) ppm.", comment: "Onboarding, Night screen: simulator readout; CO₂ before → after airing, in ppm")
         }
         return OnboardingCopy.closedReadout(sleepers: sleepers)
     }
@@ -263,18 +270,19 @@ struct NightScreen: View {
 
     private func announce(_ after: Double) {
         AccessibilityNotification.Announcement(
-            "Window open for 5 minutes. CO₂ falls to \(Metric.co2.format((after / 10).rounded() * 10)) ppm.").post()
+            String(localized: "Window open for 5 minutes. CO₂ falls to \(Metric.co2.format((after / 10).rounded() * 10)) ppm.",
+                   comment: "Onboarding, Night screen: VoiceOver announcement after airing in the simulator; the placeholder is a CO₂ value")).post()
     }
 
     // MARK: Facts
 
     private var facts: some View {
         VStack(alignment: .leading, spacing: 12) {
-            BodyText("In one study, student bedrooms averaged 2585 ppm with the window shut and 660 ppm with it open. With fresher air, students slept better and felt less sleepy the next day.", ink: true)
-            BodyText("In a sleep lab, nights at 1000 ppm or more brought slightly less efficient sleep than nights at 750. Small studies, but they point the same way.")
+            BodyText(String(localized: "In one study, student bedrooms averaged 2585 ppm with the window shut and 660 ppm with it open. With fresher air, students slept better and felt less sleepy the next day.", comment: "Onboarding, Night screen: lead paragraph"), ink: true)
+            BodyText(String(localized: "In a sleep lab, nights at 1000 ppm or more brought slightly less efficient sleep than nights at 750. Small studies, but they point the same way.", comment: "Onboarding, Night screen: body paragraph"))
             if (model.draft.answers.goals ?? []).contains(.sleep),
                OnboardingPreselect.suggestedLimit(goals: model.draft.answers.goals) != nil {
-                PersonalLine(text: "You chose sleep. Kūki will suggest a lower limit for you.")
+                PersonalLine(text: String(localized: "You chose sleep. Kūki will suggest a lower limit for you.", comment: "Onboarding, Night screen: personal line for users who chose the Sleep goal; limit = CO₂ alert limit"))
             }
             SourcesDisclosure(sources: OnboardingSources.night)
                 .padding(.top, 6)

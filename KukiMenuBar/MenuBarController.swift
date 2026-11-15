@@ -57,9 +57,9 @@ public final class MenuBarController: NSObject, KukiStatusBar, NSMenuDelegate {
 
     public required override init() {
         super.init()
-        item.button?.toolTip = "Kūki — air in this room"
+        item.button?.toolTip = String(localized: "Kūki — air in this room", bundle: .menuBar, comment: "Mac menu bar item tooltip.")
         item.autosaveName = "KukiAir"
-        render(Title(symbols: ["carbon.dioxide.cloud"], values: ["—"], labels: ["CO₂, no reading"], alert: 0))
+        render(Title(symbols: ["carbon.dioxide.cloud"], values: ["—"], labels: [String(localized: "CO₂, no reading", bundle: .menuBar, comment: "VoiceOver label of the Mac menu bar item before the first reading.")], alert: 0))
         let menu = NSMenu()
         menu.delegate = self
         item.menu = menu
@@ -207,7 +207,7 @@ public final class MenuBarController: NSObject, KukiStatusBar, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
-        let moveItem = NSMenuItem(title: "Move Sensor To", action: nil, keyEquivalent: "")
+        let moveItem = NSMenuItem(title: String(localized: "Move Sensor To", bundle: .menuBar, comment: "Mac menu bar menu item (title case, opens a submenu of rooms): tell Kūki the air sensor was carried to another room."), action: nil, keyEquivalent: "")
         let places = NSMenu()
         for (name, id) in zip(data.placeNames, data.placeIDs) {
             let p = NSMenuItem(title: name, action: #selector(choose(_:)), keyEquivalent: "")
@@ -221,11 +221,11 @@ public final class MenuBarController: NSObject, KukiStatusBar, NSMenuDelegate {
         menu.addItem(moveItem)
 
         menu.addItem(.separator())
-        menu.addItem(action("Open Kūki", "open", key: "o"))
-        menu.addItem(action("Station Mode", "station", key: ""))
-        menu.addItem(action("Settings…", "settings", key: ","))
+        menu.addItem(action(String(localized: "Open Kūki", bundle: .menuBar, comment: "Mac menu bar menu item: bring the Kūki window forward."), "open", key: "o"))
+        menu.addItem(action(String(localized: "Station Mode", bundle: .menuBar, comment: "Mac menu bar menu item: Kūki's always-on, dim full-screen display mode. Use the same name as in the app."), "station", key: ""))
+        menu.addItem(action(String(localized: "Settings…", bundle: .menuBar, comment: "Mac menu bar menu item: open Kūki's Settings window. Use the standard macOS term."), "settings", key: ","))
         menu.addItem(.separator())
-        menu.addItem(action("Quit Kūki", "quit", key: "q"))
+        menu.addItem(action(String(localized: "Quit Kūki", bundle: .menuBar, comment: "Mac menu bar menu item: quit the app. Use the standard macOS term."), "quit", key: "q"))
     }
 
     private func action(_ title: String, _ id: String, key: String) -> NSMenuItem {
@@ -268,7 +268,7 @@ public final class MenuBarController: NSObject, KukiStatusBar, NSMenuDelegate {
         if new.alert < 0 {
             // Paused (Kūki in the background): a pause mark, not dimness alone.
             let config = NSImage.SymbolConfiguration(pointSize: size * 0.7, weight: .semibold)
-            if let image = NSImage(systemSymbolName: "pause.fill", accessibilityDescription: "Paused")?
+            if let image = NSImage(systemSymbolName: "pause.fill", accessibilityDescription: String(localized: "Paused", bundle: .menuBar, comment: "VoiceOver: the pause mark in the Mac menu bar item — Kūki is in the background and not recording."))?
                 .withSymbolConfiguration(config) {
                 image.isTemplate = true
                 let attachment = NSTextAttachment()
@@ -312,7 +312,7 @@ public final class MenuBarController: NSObject, KukiStatusBar, NSMenuDelegate {
         button.image = nil
         button.attributedTitle = text
         button.setAccessibilityLabel(Self.accessibilityLabel(labels: new.labels, values: new.values, alert: new.alert))
-        button.setAccessibilityHelp("Kūki air reading. Opens the Kūki menu.")
+        button.setAccessibilityHelp(String(localized: "Kūki air reading. Opens the Kūki menu.", bundle: .menuBar, comment: "VoiceOver help for the Mac menu bar item."))
     }
 
     /// "CO₂ 812 parts per million, stale air" · "Paused, CO₂ 812 parts per
@@ -321,12 +321,17 @@ public final class MenuBarController: NSObject, KukiStatusBar, NSMenuDelegate {
         var parts = labels.isEmpty ? values : labels
         switch alert {
         case ..<0:
-            parts.insert("Paused", at: 0)
-            parts.append("last reading while Kūki is in the background")
-        case 2: parts.append("stale air")
-        case 3: parts.append("poor air, ventilate now")
+            parts.insert(String(localized: "Paused", bundle: .menuBar, comment: "VoiceOver: the pause mark in the Mac menu bar item — Kūki is in the background and not recording."), at: 0)
+            parts.append(String(localized: "last reading while Kūki is in the background", bundle: .menuBar, comment: "VoiceOver: a clause at the end of the Mac menu bar item's label (lowercase in English)."))
+        case 2: parts.append(String(localized: "stale air", bundle: .menuBar, comment: "VoiceOver: a clause at the end of the Mac menu bar item's label — indoor air getting stale (air quality, not food). Lowercase in English."))
+        case 3: parts.append(String(localized: "poor air, ventilate now", bundle: .menuBar, comment: "VoiceOver: a clause at the end of the Mac menu bar item's label — stuffy indoor air. Lowercase in English."))
         default: break
         }
-        return parts.joined(separator: ", ")
+        return parts.joined(separator: String(localized: ", ", bundle: .menuBar, comment: "VoiceOver: separator between clauses of a spoken reading (comma and space). Use your language's comma."))
     }
+}
+
+private extension Bundle {
+    /// This plug-in's own bundle: its strings live in its own catalog, not the app's.
+    static let menuBar = Bundle(for: MenuBarController.self)
 }
